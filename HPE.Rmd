@@ -1,0 +1,1338 @@
+---
+title: "HPEpaper"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Los ficheros individuales estan en Descargas/HPE_esteve/bases
+
+Discutimos que hacer con este paper que fue rechazado, se habia trabajado bastante, era un ecologico en el que se valoraba si el cumplimiento de los procesos en primaria (% de TA, HBglicada etc..) se correspondian con menos hospitalizaciones evitable, habia tambien datos socioeconomicos (del nivel socioeconomico promedio del area atendido por el ospital -o de la zbs donde se situaba?) y se encontraba que solo esta variable se asociaba a la HPE.
+
+Ahora se plantea trabajar con informacion mas fina y actualizada.. esta la base individual, pero (para outcome y algo mas desagregada para socioeconomico -el de la zona basica de residencia-) y se plantea replicar aquel trabajo 
+
+Os mando la base agrupada (base.txt) junto con un Word con las variables y una sintaxis (análisis.R) con algún análisis previo.
+ 
+Hay una variable “nueva” que es pesotot, pesodm, pesohta, peso epoc. Esta variable se basa en los ACGs. Lo que he hecho ha sido dar un peso a cada ACG en relación a las HPE (nºHPE/personas con un ACG)/(nºHPE/personas total). Luego sumo los pesos en cada cupo y divido por el nº de personas. No sé si le veis el sentido, si eso se quita.
+ 
+ Los ACG clasifican a cada paciente en uno de las 105 categorías ACG. Son excluyentes (1 categoría ACG por persona). Se supone que los pacientes que están un mismo ACG comparten mismo patrón de morbilidad y uso de recursos sanitarios. Con esa lógica he asumido que podríamos representar una medida de morbilidad (que prediga cada HPE) de cada cupo y para eso:
+ 
+En cada categoría ACG veo cuántas personas hay y cuántas  HPE generaron y asumo que el valor que da es el peso que tiene cada categoría ACG. Luego lo he dividido entre nºHPE/total población para normalizarlo de alguna manera (aunque este paso podría sobrar).
+Luego cojo a nivel de cupo y sumo todos los pesos que generan las personas dentro del cupo y lo divido por el número de personas en el cupo. Esto me dará como un score a nivel de grupo que predice HPE.
+No sé si se entiende, si tiene sentido o si no están bien hechos los pasos.
+ 
+ Mando las categorías ACG
+ 
+ 
+ REUNION 11-12-17
+ 
+ -> Pregunta: son efectivas las diversas intervenciones incluidas en la oferta preferente (OP) para prevenir hospitalizaciones evitables
+ 
+ -> Sobre la OP
+  -  base op, osi (area sanitaria-hospitalaria), 1466 cupos, con indicadores (y sus poblaciones de referencia) para hta (6), epoc (4), d
+  - QUEDAMOS EN REDUCIR O CLASIFICAR ESOS INDICADORES EN BASE A LA EVIDENCIA QUE LOS SUSTENTA.. FELIPE ENVIA UNA TABLA que hay que completar para ver a que variable corresponde y que criterio de edad se aplica a ese indicador (ver abajo)
+  - el analisis primero se hara para cada uno de los outcome por separado (aqui estamos ante un compositive y vendra bien explorar los modelos que trabajan con una matriz de variables resultados): HPE_epoc/dm/icc [en esta ultima tenemos la intervencion por y prevalencia de hta, tb dislipemia?].. 
+  
+  - hay un debate previo acerca del denominador a aplicar: si la poblacion general, si aquellos registrados..., y sobre esto 'ultimo, donde?.. resulta que la op se aplica sobre lo registrado en primaria (los denominadores -segun indicador- que aparecen en la base op), pero la base individual que manejamos "ind" tiene variables indicador para dm,hta,icc... (ademas de farmacos etc), que no solo se basan en la fuente primaria, tambien lo definan a partir de  farmacos (salvo epoc) y empleando no solo fuentes de AP (son las definicion x ACG).. 
+      - el transfondo del debate es que la medida de prevalencia basada en AP puede estar sesgada, segun medico, incluso segun medico-patologia, podemos encontrar criterios de diagnostico con umbrales de sensibilidad-especificidad diferenciados.. Como determinar e incorporar en los modelos estos umbrales?.. 
+        a. analizando en un modelo vacio, o ajustado por composicion de edad-sexo del cupo, la propension de cada centro, marcando los que difieran significativamente del comportamiento medio// b. contrastando las prevalencias que marcan los ACG frente a la que se marca en AP-op
+        
+  -  Volviendo al analisis, se tratara de ir por capas, las poblaciones seran las que marquen los ACG, se aplicara alguna restriccion DE EDAD QUE AUMENTE LA PROBABILIDAD DE OUTCOME (INCIDENCIA DE HPE), con modelos que parten de CONOCER LA VARIABILIDAD A NIVEL DE OSI - CUPO, y las relaciones -particion de varianza- entre ellas.. para ir explicando estas variaciones a medida que se incorporan variables de composicion de los cupos (edad [HAY QUE DECIDIR COMO SE TRABAJARA LA MODELIZACION DE LA EDAD / SPLINE?], sexo..), Y POR ULTIMO, DE LO QUE QUEDA SIN EXPLICAR.. VER SI LAS INTERVENCIONES AYUDAN A EXPLICAR ALGO (TIPO A EN NIVEL DE EVIDENCIA Y EN CONTRASTE LAS NO A)
+  
+  - me viene a la cabeza este trabajo de HPE que emplean ECUACIONES ESTRUCTARELES.. (BUSCAR REF) - veo que el stata tiene opciones tanto para "efectos del tratamiento", con diversos esquemas de apareamiento... como para ecuaciones estructurales
+
+
+Reunion con berta 
+
+
+
+
+
+
+
+
+
+
+
+
+    Supplementary file. Good practice indicators included in the study. Source of evidence and grade of recommendation following the Scottish Intercollegiate Guidelines Network (SIGN).
+
+Aquí tienes la correspondencia:
+ 
+DIABETES:
+ 
+CBA1: estudio analítico básico
+(mediana=37,7%)
+CBA2: control periódico de enfermería
+CBA3: cuidado de los pies
+CBA4: revisión oftalmológica
+CBA5: cálculo del riesgo coronario
+CBA6: buen control TA
+CBA7: buen control tabaquismo
+CBA8: buen control HbA1c
+ 
+EPOC:
+ 
+CBA1: dg mediante espirometría
+CBA2: espirometría trienal
+CBA3: uso de inhaladores
+CBA4: buen control tabaquismo
+ 
+ICC (con la salvedad que hemos dicho antes de que son, en realidad, CBAs para el control de la HTA)
+ 
+CBA1: estudio analítico básico
+CBA2: estudio analítico periódico
+CBA3: cálculo del riesgo coronario
+CBA4: control de enfermería
+CBA5: estudio ECG
+CBA6: buen control TA
+
+
+
+
+
+
+
+
+
+DISEASE
+INDICATOR OF GOOD PRACTICE (intervals between assessments should be as stated or less) 
+Grade 
+
+
+
+DIABETES39-43
+
+Basic laboratory tests: on diagnosis, blood glucose, HbA1C and creatinine levels, and albumin/creatinine ratio
+D
+
+Regular nurse-led monitoring: blood pressure measurement or ambulatory blood pressure monitoring; weight measurement; and every 4 months, advice on: smoking, alcohol consumption, self-testing and self-management
+D
+
+Foot care: yearly assessment of appearance, sensation (monofilament test), pedal pulse, and Ankle Brachial Index, if appropriate; investigation of symptoms; and risk classification on the basis of diastolic blood pressure 
+D
+
+Eye exam: initial assessment, with retinopathy screening or referral to an ophthalmologist; and repeat every 3 years if normal 
+B
+
+Estimation of coronary risk: risk calculated annually using the REGICOR chart
+C
+
+Good blood pressure monitoring: assessment of whether ≤140/80 mm Hg, or 135/85 mm Hg with ambulatory blood pressure monitoring, every 6 months
+B
+
+Good smoking habit monitoring
+D
+
+Good HbA1c control monitoring: every 6 months,  assessment of whether HbA1c<7%
+B
+
+COPD44-50
+Diagnosis based on spirometry: % of patients labelled with COPD that have undergone at least one post-bronchodilator spirometry test 
+D
+
+Spirometry:   every 3 years
+D
+
+Check of  inhaler technique
+D
+
+Good  smoking habit monitoring
+A
+
+Annual influenza vaccination
+A
+
+CONGESTIVE HEART FAILURE39.51-55
+Basic laboratory tests: complete blood count, blood glucose, creatinine, sodium, potassium, cholesterol, triglycerides,  and high- and low-density lipoprotein levels, sedimentation rate, and albumin/creatinine ratio 
+D
+
+Regular laboratory tests: at least every 3 years,  blood glucose level, lipid profile,  and albumin/creatinine ratio as well as ion levels if taking diuretics and/or angiotensin-converting-enzyme inhibitors or angiotensin II receptor antagonists
+D
+
+Estimation of coronary risk: risk calculated at the time of diagnosis using the REGICOR chart33 
+D
+
+Regular nurse-led monitoring: every 6 months, following the nursing care plan or a check-up that includes: 1-  blood pressure measurement or ambulatory blood pressure monitoring; 2- assessment of treatment adherence and any side effects; 3- advice on lifestyle modification (at least one of the following): smoking, alcohol consumption, diet or exercise; 4- weight measurement, at least once a year; and 5- calculation of cardiovascular risk (REGICOR)
+D
+
+Electrocardiogram: at the time of diagnosis of the disease and, subsequently, every 5 years if normal 
+D
+
+Good blood pressure monitoring: assessment of whether ≤140/80 mm Hg, or 135/85 mm Hg with ambulatory blood pressure monitoring (every 12 months):
+B
+
+ 
+
+ 
+ 
+ 
+```{r}
+
+library(foreign)
+library(Hmisc)
+setwd("~/Documents/Proyectos/osakidetza/HPE/base")
+base <-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/base.txt", header = TRUE, sep = "")
+baseop <-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/cupoplusop.txt", header = TRUE, sep = "")
+op<-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/oferta_preferente.txt", header = TRUE, sep = "")
+summary(op)
+pobcu<-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/poblacion_cupo.txt", header = TRUE, sep = "")
+
+ind<-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/poblacion_individual_junta.txt", header = TRUE, sep = "")
+
+summary(ind$edad)
+summary(ind$hpe_tot)
+ #     Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
+ # 0.000000  0.000000  0.000000  0.003358  0.000000 11.000000 
+
+library(dplyr)
+indf <- filter(ind,edad>65) 
+ summary(indf$hpe_tot)
+ #     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+ # 0.00000  0.00000  0.00000  0.01413  0.00000 11.00000 
+ 
+ 
+
+names(ind)
+#  [1] "acg"         "id_paciente" "cupo"        "uap"         "com"         "edad"        "sexo"       
+#  [8] "numfarmac"   "num"         "priv"        "quintil"     "dm"          "hta"         "epoc"       
+# [15] "icc"         "lipid"       "vacuna"      "vacunaepoc"  "insu"        "ado"         "ieca"       
+# [22] "insul_dm"    "ado_dm"      "antidm_dm"   "ieca_icc"    "antidm"      "hpe_icc"     "hpe_epoc"   
+# [29] "hpe_dm"      "hpe_tot"     "pesotot"     "pesodm"      "pesoepoc"    "pesoicc"     "mayor64"    
+# [36] "mujer"
+summary(ind)
+
+### nos quedamos solo con los que tengan alguna de las cronicas hpe..
+
+library(dplyr)
+ind <- mutate(ind, dei =paste0(dm, epoc, icc), collapse="")
+
+indei <- filter(ind, dei!="000")
+
+summary(indei)
+
+```
+ table(ind$hpe_icc ind$icc)
+ 
+ 
+
+```{r altas.R}
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\ingresos")
+
+
+####HPE POR ICC####
+##ICC##
+icc<- csv.get('icc.csv', sep=",")
+summary(icc)
+
+colnames(icc)<-c("id_paciente","epi","fecing","fecnac")
+summary(icc)
+icc$fecing<-as.Date(icc$fecing)
+icc$fecnac<-as.Date(icc$fecnac)
+icc$edading<-as.numeric(as.difftime(icc$fecing-icc$fecnac),units="days")/365.25
+icc$numicc<-1
+sum(icc$numicc)
+
+edu<-duplicated(icc$epi)
+summary(edu)
+
+##COJO PROCEDIMIENTOS CARDIACOS##
+proc_cardiaco<- csv.get('exc_proc_cardiac.csv', sep=",")
+summary(proc_cardiaco)
+colnames(proc_cardiaco)<-c("id_paciente","epi","fecing")
+proc_cardiaco$fecing<-as.Date(proc_cardiaco$fecing)
+proc_cardiaco$numproc_cardiaco<-1
+sum(proc_cardiaco$numproc_cardiaco)
+
+edu<-duplicated(proc_cardiaco$epi)
+summary(edu)
+
+##COJO CARDIOPAT?A ISQU?MICA/ATEROSCLEROSIS CORONARIA##
+cisquemica<- csv.get('exc_cisq.csv', sep=",")
+summary(cisquemica)
+colnames(cisquemica)<-c("id_paciente","epi","fecing")
+cisquemica$fecing<-as.Date(cisquemica$fecing)
+cisquemica$numcisquemica<-1
+sum(cisquemica$numcisquemica)
+
+edu<-duplicated(cisquemica$epi)
+summary(edu)
+
+
+##COJO EMBARAZO PARTO PUERPERIO##
+
+embarazo<- csv.get('exc_embarzo_parto_puerperio.csv', sep=",")
+summary(embarazo)
+colnames(embarazo)<-c("id_paciente","epi","fecing")
+embarazo$fecing<-as.Date(embarazo$fecing)
+
+embarazo$numembarazo<-1
+sum(embarazo$numembarazo)
+
+edu<-duplicated(embarazo$epi)
+summary(edu)
+
+##COJO INSUFICIENCIA RENAL##
+insufrenal<- csv.get('exc_irenal.csv', sep=",")
+summary(insufrenal)
+colnames(insufrenal)<-c("id_paciente","epi","fecing")
+insufrenal$fecing<-as.Date(insufrenal$fecing)
+
+insufrenal$numinsufrenal<-1
+sum(insufrenal$numinsufrenal)
+
+edu<-duplicated(insufrenal$epi)
+summary(edu)
+
+
+##COJO EPOC exclu##
+epoc<- csv.get('exc_epoc.csv', sep=",")
+summary(epoc)
+colnames(epoc)<-c("id_paciente","epi","fecing")
+epoc$fecing<-as.Date(epoc$fecing)
+epoc$numepoc<-1
+sum(epoc$numepoc)
+
+edu<-duplicated(epoc$epi)
+summary(edu)
+
+#####JUNTAR BASES DE DATOS###
+sum(icc$numicc)
+hpe<-merge(icc,insufrenal,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe<-merge(hpe,epoc,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe<-merge(hpe,embarazo,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe<-merge(hpe,cisquemica,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe<-merge(hpe,proc_cardiaco,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+
+hpe$numinsufrenal[is.na(hpe$numinsufrenal)] <- 0
+hpe$numepoc[is.na(hpe$numepoc)] <- 0
+hpe$numembarazo[is.na(hpe$numembarazo)] <- 0
+hpe$numcisquemica[is.na(hpe$numcisquemica)] <- 0
+hpe$numproc_cardiaco[is.na(hpe$numproc_cardiaco)] <- 0
+
+
+
+summary(hpe)
+sum(hpe$numicc)
+
+hpe$excluidos<-hpe$numinsufrenal+hpe$numepoc+hpe$numembarazo+hpe$numcisquemica+hpe$numproc_cardiaco
+hpe<-subset(hpe,excluidos==0)
+summary(hpe)
+sum(hpe$numicc)
+
+
+###3423 hpe
+hpe<-subset(hpe,select=c(id_paciente,fecing,numicc))
+summary(hpe)
+colnames(hpe)<-c("id_paciente","fecing","hpe_icc")
+sum(hpe$hpe_icc)
+
+hpe_icc<-stats:::aggregate.formula(cbind(hpe_icc)~id_paciente, data=hpe, sum, na.rm=TRUE)
+summary(hpe_icc)
+sum(hpe_icc$hpe_icc)
+
+
+###3423 ingresos evitables ICC###
+##################################################
+##################################################
+##################################################
+
+###HPE POR EPOC
+
+##EPOC##
+epoc1<- csv.get('EPOC1.csv', sep=",")
+summary(epoc1)
+
+colnames(epoc1)<-c("id_paciente","epi","fecing","fecnac")
+summary(epoc1)
+epoc1$fecing<-as.Date(epoc1$fecing)
+epoc1$fecnac<-as.Date(epoc1$fecnac)
+
+epoc1$numepoc<-1
+sum(epoc1$numepoc)
+
+edu<-duplicated(epoc1$epi)
+summary(edu)
+
+epoc2<- csv.get('EPOC2.csv', sep=",")
+summary(epoc2)
+
+colnames(epoc2)<-c("id_paciente","epi","fecing","fecnac")
+summary(epoc2)
+epoc2$fecing<-as.Date(epoc2$fecing)
+epoc2$fecnac<-as.Date(epoc2$fecnac)
+
+epoc2$numepoc<-1
+sum(epoc2$numepoc)
+
+
+and_epoc2<- csv.get('and_epoc2.csv', sep=",")
+summary(and_epoc2)
+colnames(and_epoc2)<-c("id_paciente","epi","fecing")
+and_epoc2$fecing<-as.Date(and_epoc2$fecing)
+and_epoc2$num_and_epoc<-1
+sum(and_epoc2$num_and_epoc)
+
+epoc2<-merge(epoc2,and_epoc2,by=c("id_paciente","epi","fecing"),all.x=TRUE)
+epoc2<-subset(epoc2,!is.na(num_and_epoc))
+summary(epoc2)
+epoc2<-subset(epoc2,select=-c(num_and_epoc))
+
+
+epoc3<- csv.get('EPOC3.csv', sep=",")
+summary(epoc3)
+
+colnames(epoc3)<-c("id_paciente","epi","fecing","fecnac")
+summary(epoc3)
+epoc3$fecing<-as.Date(epoc3$fecing)
+epoc3$fecnac<-as.Date(epoc3$fecnac)
+epoc3$numepoc<-1
+sum(epoc3$numepoc)
+
+
+and_epoc3<- csv.get('and_epoc3.csv', sep=",")
+summary(and_epoc3)
+colnames(and_epoc3)<-c("id_paciente","epi","fecing")
+and_epoc3$fecing<-as.Date(and_epoc3$fecing)
+and_epoc3$num_and_epoc<-1
+sum(and_epoc3$num_and_epoc)
+
+epoc3<-merge(epoc3,and_epoc3,by=c("id_paciente","epi","fecing"),all.x=TRUE)
+epoc3<-subset(epoc3,!is.na(num_and_epoc))
+summary(epoc3)
+epoc3<-subset(epoc3,select=-c(num_and_epoc))
+
+epoc<-rbind(epoc1,epoc2,epoc3)
+summary(epoc)
+sum(epoc$numepoc)
+
+
+##excluir ICC
+
+
+icc<- csv.get('exc_icc.csv', sep=",")
+summary(icc)
+
+colnames(icc)<-c("id_paciente","epi","fecing")
+summary(icc)
+icc$fecing<-as.Date(icc$fecing)
+icc$numicc<-1
+sum(icc$numicc)
+
+edu<-duplicated(icc$epi)
+summary(edu)
+
+###salud mental
+mental<- csv.get('exc_saludmental_epoc.csv', sep=",")
+summary(mental)
+
+colnames(mental)<-c("id_paciente","epi","fecing")
+summary(mental)
+mental$fecing<-as.Date(mental$fecing)
+mental$nummental<-1
+sum(mental$nummental)
+
+edu<-duplicated(mental$epi)
+summary(edu)
+
+###enf.respiratorias cong?nitas
+congenit<- csv.get('exc_congenit.csv', sep=",")
+summary(congenit)
+
+colnames(congenit)<-c("id_paciente","epi","fecing")
+summary(congenit)
+congenit$fecing<-as.Date(congenit$fecing)
+congenit$numcongenit<-1
+sum(congenit$numcongenit)
+
+edu<-duplicated(congenit$epi)
+summary(edu)
+
+####parto_embarazo
+
+parto<- csv.get('exc_embarzo_parto_puerperio.csv', sep=",")
+summary(parto)
+
+colnames(parto)<-c("id_paciente","epi","fecing")
+summary(parto)
+parto$fecing<-as.Date(parto$fecing)
+parto$numparto<-1
+sum(parto$numparto)
+
+edu<-duplicated(parto$epi)
+summary(edu)
+
+
+#####JUNTAR BASES DE DATOS###
+
+hpe_epoc<-merge(epoc,icc,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe_epoc<-merge(hpe_epoc,mental,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe_epoc<-merge(hpe_epoc,parto,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe_epoc<-merge(hpe_epoc,congenit,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+
+summary(hpe_epoc)
+
+hpe_epoc$numicc[is.na(hpe_epoc$numicc)] <- 0
+hpe_epoc$nummental[is.na(hpe_epoc$nummental)] <- 0
+hpe_epoc$numparto[is.na(hpe_epoc$numparto)] <- 0
+hpe_epoc$numcongenit[is.na(hpe_epoc$numcongenit)] <- 0
+
+
+summary(hpe_epoc)
+sum(hpe_epoc$numepoc)
+
+hpe_epoc$excluidos<-hpe_epoc$numicc+hpe_epoc$nummental+hpe_epoc$numparto+hpe_epoc$numcongenit
+hpe_epoc<-subset(hpe_epoc,excluidos==0)
+summary(hpe_epoc)
+sum(hpe_epoc$numepoc)
+
+hpe_epoc<-subset(hpe_epoc,select=c(id_paciente,fecing,numepoc))
+summary(hpe_epoc)
+colnames(hpe_epoc)<-c("id_paciente","fecing","hpe_epoc")
+sum(hpe_epoc$hpe_epoc)
+
+
+
+hpe_epoc<-stats:::aggregate.formula(cbind(hpe_epoc)~id_paciente, data=hpe_epoc, sum, na.rm=TRUE)
+summary(hpe_epoc)
+sum(hpe_epoc$hpe_epoc)
+###4254 ingresos evitables EPOC###
+##################################################
+##################################################
+##################################################
+
+###HPE POR DM
+
+##DM##
+dm<- csv.get('dm.csv', sep=",")
+summary(dm)
+
+colnames(dm)<-c("id_paciente","epi","fecing","fecnac")
+summary(dm)
+dm$fecing<-as.Date(dm$fecing)
+dm$fecnac<-as.Date(dm$fecnac)
+
+dm$numdm<-1
+sum(dm$numdm)
+
+edu<-duplicated(dm$epi)
+summary(edu)
+
+##COJO EMBARAZO PARTO PUERPERIO##
+
+embarazo<- csv.get('exc_embarzo_parto_puerperio.csv', sep=",")
+summary(embarazo)
+colnames(embarazo)<-c("id_paciente","epi","fecing")
+embarazo$fecing<-as.Date(embarazo$fecing)
+
+embarazo$numembarazo<-1
+sum(embarazo$numembarazo)
+
+edu<-duplicated(embarazo$epi)
+summary(edu)
+
+
+###SALUD MENTAL
+mental<- csv.get('exc_saludmental_DM.csv', sep=",")
+summary(mental)
+
+colnames(mental)<-c("id_paciente","epi","fecing")
+summary(mental)
+mental$fecing<-as.Date(mental$fecing)
+mental$nummental<-1
+sum(mental$nummental)
+
+edu<-duplicated(mental$epi)
+summary(edu)
+
+#####JUNTAR BASES DE DATOS###
+
+hpe_dm<-merge(dm,embarazo,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+hpe_dm<-merge(hpe_dm,mental,all.x=TRUE,by=c("id_paciente","epi","fecing"))
+summary(hpe_dm)
+
+hpe_dm$nummental[is.na(hpe_dm$nummental)] <- 0
+hpe_dm$numembarazo[is.na(hpe_dm$numembarazo)] <- 0
+
+hpe_dm$excluidos<-hpe_dm$numembarazo+hpe_dm$nummental
+hpe_dm<-subset(hpe_dm,excluidos==0)
+summary(hpe_dm)
+sum(hpe_dm$numdm)
+
+hpe_dm<-subset(hpe_dm,select=c(id_paciente,fecing,numdm))
+summary(hpe_dm)
+colnames(hpe_dm)<-c("id_paciente","fecing","hpe_dm")
+sum(hpe_dm$hpe_dm)
+
+hpe_dm<-stats:::aggregate.formula(cbind(hpe_dm)~id_paciente, data=hpe_dm, sum, na.rm=TRUE)
+summary(hpe_dm)
+sum(hpe_dm$hpe_dm)
+###170 ingresos evitables DM###
+##################################################
+##################################################
+
+
+#####JUNTAR BASES DE DATOS###
+
+###JUNTAR TODAS LAS HPE
+
+hpe<-merge(hpe_icc,hpe_epoc,by="id_paciente",all=TRUE)
+hpe<-merge(hpe,hpe_dm,by="id_paciente",all=TRUE)
+
+summary(hpe)
+hpe$hpe_icc[is.na(hpe$hpe_icc)]<-0
+hpe$hpe_epoc[is.na(hpe$hpe_epoc)]<-0
+hpe$hpe_dm[is.na(hpe$hpe_dm)]<-0
+
+hpe$hpe_tot<-hpe$hpe_dm+hpe$hpe_epoc+hpe$hpe_icc
+
+
+sum(hpe$hpe_icc)
+sum(hpe$hpe_epoc)
+sum(hpe$hpe_dm)
+
+
+sum(hpe$hpe_tot)
+
+##GUARDAR
+write.table(hpe, "d:/perfiles/29032475n/Escritorio/EDUARDO/VARIABILIDAD CLINICA/beca esteve/2015/ingresos/hpe.txt", sep="\t")
+
+hpe<-read.table("hpe.txt", header = TRUE, sep = "")
+
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+#############################
+
+#####JUNTAMOS TODAS LAS BASES
+library(Hmisc)
+
+##ALTAS
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\ingresos")
+hpe<-read.table("hpe.txt", header = TRUE, sep = "")
+
+
+
+
+##POBLACION
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\poblacion")
+pob<-read.table("pob_201408.txt", header = TRUE, sep = "")
+
+
+##OFERTA PREFERENTE
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\oferta preferente")
+op<- csv.get('oferta_preferente2014c2.csv', sep=",",encoding="UTF-8")
+colnames(op)<-c("osi","codosi","uap_text","uap","cupo","codarea","area","coditem","item","codindi","indi","diana","cumple","porcencumple")
+summary(op)
+
+op$porcencumple<-as.numeric(sub(",", ".", op$porcencumple, fixed = TRUE))
+
+hta1<-subset(op,codindi==2231,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(hta1)<-c("osi","cupo","pob_hta1","cump_hta1","porc_hta1")
+hta2<-subset(op,codindi==2232,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(hta2)<-c("osi","cupo","pob_hta2","cump_hta2","porc_hta2")
+hta3<-subset(op,codindi==2233,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(hta3)<-c("osi","cupo","pob_hta3","cump_hta3","porc_hta3")
+hta4<-subset(op,codindi==2234,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(hta4)<-c("osi","cupo","pob_hta4","cump_hta4","porc_hta4")
+hta5<-subset(op,codindi==2235,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(hta5)<-c("osi","cupo","pob_hta5","cump_hta5","porc_hta5")
+hta6<-subset(op,codindi==2236,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(hta6)<-c("osi","cupo","pob_hta6","cump_hta6","porc_hta6")
+
+hta<-merge(hta1,hta2,by=c("osi","cupo"),all=TRUE)
+hta<-merge(hta,hta3,by=c("osi","cupo"),all=TRUE)
+hta<-merge(hta,hta4,by=c("osi","cupo"),all=TRUE)
+hta<-merge(hta,hta5,by=c("osi","cupo"),all=TRUE)
+hta<-merge(hta,hta6,by=c("osi","cupo"),all=TRUE)
+summary(hta)
+
+dm1<-subset(op,codindi==3131,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm1)<-c("osi","cupo","pob_dm1","cump_dm1","porc_dm1")
+dm2<-subset(op,codindi==3132,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm2)<-c("osi","cupo","pob_dm2","cump_dm2","porc_dm2")
+dm3<-subset(op,codindi==3133,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm3)<-c("osi","cupo","pob_dm3","cump_dm3","porc_dm3")
+dm4<-subset(op,codindi==3134,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm4)<-c("osi","cupo","pob_dm4","cump_dm4","porc_dm4")
+dm5<-subset(op,codindi==3135,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm5)<-c("osi","cupo","pob_dm5","cump_dm5","porc_dm5")
+dm6<-subset(op,codindi==3136,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm6)<-c("osi","cupo","pob_dm6","cump_dm6","porc_dm6")
+dm7<-subset(op,codindi==3137,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm7)<-c("osi","cupo","pob_dm7","cump_dm7","porc_dm7")
+dm8<-subset(op,codindi==3138,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(dm8)<-c("osi","cupo","pob_dm8","cump_dm8","porc_dm8")
+
+
+dm<-merge(dm1,dm2,by=c("osi","cupo"),all=TRUE)
+dm<-merge(dm,dm3,by=c("osi","cupo"),all=TRUE)
+dm<-merge(dm,dm4,by=c("osi","cupo"),all=TRUE)
+dm<-merge(dm,dm5,by=c("osi","cupo"),all=TRUE)
+dm<-merge(dm,dm6,by=c("osi","cupo"),all=TRUE)
+dm<-merge(dm,dm7,by=c("osi","cupo"),all=TRUE)
+dm<-merge(dm,dm8,by=c("osi","cupo"),all=TRUE)
+
+
+summary(dm)
+
+epoc1<-subset(op,codindi==7311,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(epoc1)<-c("osi","cupo","pob_epoc1","cump_epoc1","porc_epoc1")
+epoc2<-subset(op,codindi==7312,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(epoc2)<-c("osi","cupo","pob_epoc2","cump_epoc2","porc_epoc2")
+epoc3<-subset(op,codindi==7313,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(epoc3)<-c("osi","cupo","pob_epoc3","cump_epoc3","porc_epoc3")
+epoc4<-subset(op,codindi==7314,select=c(osi,cupo,diana,cumple,porcencumple))
+colnames(epoc4)<-c("osi","cupo","pob_epoc4","cump_epoc4","porc_epoc4")
+
+
+epoc<-merge(epoc1,epoc2,by=c("osi","cupo"),all=TRUE)
+epoc<-merge(epoc,epoc3,by=c("osi","cupo"),all=TRUE)
+epoc<-merge(epoc,epoc4,by=c("osi","cupo"),all=TRUE)
+
+summary(epoc)
+
+op_final<-merge(hta,epoc,by=c("osi","cupo"),all=TRUE)
+op_final<-merge(op_final,dm,by=c("osi","cupo"),all=TRUE)
+
+op_final$op<-1
+
+summary(op_final)
+
+write.table(op_final, "d:/perfiles/29032475n/Escritorio/oferta_preferente.txt", sep="\t")
+
+###VACUNACI?N GRIPE
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\oferta preferente")
+gripe<- csv.get('vacunados_gripe2014_a?onatural.csv', sep=",",encoding="UTF-8")
+summary(gripe)
+colnames(gripe)<-c("dbp","id_paciente")
+gripe<-subset(gripe,select="id_paciente")
+gripe$vacuna<-1
+sum(gripe$vacuna)
+
+pob<-merge(pob,gripe,by="id_paciente",all.x=TRUE)
+summary(pob)
+sum(pob$vacuna,na.rm=TRUE)
+pob$vacunaepoc<-0
+pob$vacunaepoc[pob$epoc==1&pob$vacuna==1]<-1
+sum(pob$epoc)
+sum(pob$vacunaepoc)
+
+
+##FARMACIA
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\farmacia")
+insu<- csv.get('insulina.csv', sep=",",encoding="UTF-8")
+summary(insu)
+colnames(insu)<-c("id_paciente","fecini","fecfin")
+insu<-subset(insu,select="id_paciente")
+insu$insu<-1
+sum(insu$insu)
+insu$dupli<-duplicated(insu$id_paciente)
+insu<-subset(insu,dupli=="FALSE")
+insu<-subset(insu,select=c("id_paciente","insu"))
+sum(insu$insu)
+
+ado<- csv.get('antidiabeticosorales.csv', sep=",",encoding="UTF-8")
+summary(ado)
+colnames(ado)<-c("id_paciente","fecini","fecfin")
+ado<-subset(ado,select="id_paciente")
+ado$ado<-1
+sum(ado$ado)
+ado$dupli<-duplicated(ado$id_paciente)
+ado<-subset(ado,dupli=="FALSE")
+ado<-subset(ado,select=c("id_paciente","ado"))
+sum(ado$ado)
+
+ieca<- csv.get('ieca_ara2.csv', sep=",",encoding="UTF-8")
+summary(ieca)
+colnames(ieca)<-c("id_paciente","fecini","fecfin")
+ieca<-subset(ieca,select="id_paciente")
+ieca$ieca<-1
+sum(ieca$ieca)
+ieca$dupli<-duplicated(ieca$id_paciente)
+ieca<-subset(ieca,dupli=="FALSE")
+ieca<-subset(ieca,select=c("id_paciente","ieca"))
+sum(ieca$ieca)
+
+
+farmacos<-merge(insu,ado,by="id_paciente",all=TRUE)
+farmacos<-merge(farmacos,ieca,by="id_paciente",all=TRUE)
+summary(farmacos)
+sum(farmacos$ieca,na.rm=TRUE)
+sum(farmacos$insu,na.rm=TRUE)
+sum(farmacos$ado,na.rm=TRUE)
+
+pob<-merge(pob,farmacos,by="id_paciente",all.x=TRUE)
+summary(pob)
+
+pob$insul_dm<-0
+pob$insul_dm[pob$insu==1&pob$dm==1]<-1
+sum(pob$dm)
+sum(pob$insul_dm)
+
+pob$ado_dm<-0
+pob$ado_dm[pob$ado==1&pob$dm==1]<-1
+sum(pob$dm)
+sum(pob$ado_dm)
+
+pob$antidm_dm<-0
+pob$antidm_dm[(pob$ado==1|pob$insu==1)&pob$dm==1]<-1
+sum(pob$dm)
+sum(pob$antidm_dm)
+
+
+pob$ieca_icc<-0
+pob$ieca_icc[pob$ieca==1&pob$icc==1]<-1
+sum(pob$icc)
+sum(pob$ieca_icc)
+sum(pob$icc)
+###muy bajo el porcentaje de icc con ieca/ara2: 60%
+
+pob$vacuna[is.na(pob$vacuna)]<-0
+pob$vacunaepoc[is.na(pob$vacunaepoc)]<-0
+pob$insu[is.na(pob$insu)]<-0
+pob$ado[is.na(pob$ado)]<-0
+pob$ieca[is.na(pob$ieca)]<-0
+pob$insul_dm[is.na(pob$insul_dm)]<-0
+pob$ado_dm[is.na(pob$ado_dm)]<-0
+pob$ieca_icc[is.na(pob$ieca_icc)]<-0
+
+pob$antidm<-0
+pob$antidm[pob$ado==1|pob$insu==1]<-1
+
+
+###################################
+###################################
+
+summary(hpe)
+sum(hpe$hpe_icc)
+sum(hpe$hpe_epoc)
+sum(hpe$hpe_dm)
+sum(hpe$hpe_tot)
+summary(pob)
+
+pob<-merge(pob,hpe,by="id_paciente",all.x=TRUE)
+pob$hpe_icc[is.na(pob$hpe_icc)]<-0
+pob$hpe_epoc[is.na(pob$hpe_epoc)]<-0
+pob$hpe_dm[is.na(pob$hpe_dm)]<-0
+pob$hpe_tot[is.na(pob$hpe_tot)]<-0
+
+
+
+
+sum(pob$hpe_icc)
+sum(pob$hpe_epoc)
+sum(pob$hpe_dm)
+sum(pob$hpe_tot)
+sum(pob$num)
+
+summary(pob)
+head(pob)
+
+###gehitzen dizkiogu "pesos ACG.R" artxiboan ateratako pisuak:
+pob<-merge(pob,acg,by="acg",all.x=TRUE)
+head(pob)
+
+pob$mayor64<-0
+pob$mayor64[pob$edad>64]<-1
+
+pob$mujer<-0
+pob$mujer[pob$sexo==2]<-1
+
+write.table(pob, "d:/perfiles/29032475n/Escritorio/poblacion_individual_junta.txt", sep="\t")
+
+colnames(pob)
+colnames(op_final)
+
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\base")
+pob<-read.table("poblacion_individual_junta.txt", header = TRUE, sep = "")
+
+#####################################################
+######################################################
+############################
+##############################
+##################################
+###################################
+####################################
+#######################################
+####################################
+##################################
+################################
+###############################
+###############################
+
+
+
+
+
+
+###excluidmos edad menor de 15
+pob<-subset(pob,edad>14)
+
+
+###pasamos a cupo
+
+cupo<-stats:::aggregate.formula(cbind(num,mayor64,mujer,pesotot,pesodm,pesoepoc,pesoicc,dm,icc,epoc,hta,lipid,vacuna,vacunaepoc,priv,quintil,
+insu,ado,antidm,ieca,insul_dm,ado_dm,antidm_dm,ieca_icc,hpe_icc,hpe_epoc,hpe_dm,hpe_tot)~cupo+uap+com, data=pob, sum, na.rm=TRUE)
+summary(cupo)
+
+cupo<-subset(cupo,select=-c(quintil))
+cupo<-subset(cupo,select=-c(insu,ado,antidm,ieca))
+
+###orain
+
+cupo$mayor64prop<-cupo$mayor64/cupo$num
+cupo$mujerprop<-cupo$mujer/cupo$num
+cupo$priv<-cupo$priv/cupo$num
+
+cupo$pesodm<-cupo$pesodm/cupo$num
+cupo$pesoepoc<-cupo$pesoepoc/cupo$num
+cupo$pesoicc<-cupo$pesoicc/cupo$num
+cupo$pesotot<-cupo$pesotot/cupo$num
+
+cupo$dmprop<-cupo$dm/cupo$num
+cupo$iccprop<-cupo$icc/cupo$num
+cupo$epocprop<-cupo$epoc/cupo$num
+cupo$htaprop<-cupo$hta/cupo$num
+cupo$lipidprop<-cupo$lipid/cupo$num
+
+cupo$vacunaepocprop<-cupo$vacunaepoc/cupo$epoc
+cupo$vacunaprop<-cupo$vacuna/cupo$num
+
+cupo$insulprop<-cupo$insul_dm/cupo$dm
+cupo$adoprop<-cupo$ado_dm/cupo$dm
+cupo$antidmprop<-cupo$antidm_dm/cupo$dm
+cupo$iecaprop<-cupo$ieca_icc/cupo$icc
+
+
+cupo$hpeprop_icc<-cupo$hpe_icc/cupo$num
+cupo$hpeprop_dm<-cupo$hpe_dm/cupo$num
+cupo$hpeprop_epoc<-cupo$hpe_epoc/cupo$num
+cupo$hpeprop_tot<-cupo$hpe_tot/cupo$num
+
+
+cupo$numcupos<-1
+
+summary(cupo)
+
+sum(cupo$numcupos)
+
+write.table(cupo, "d:/perfiles/29032475n/Escritorio/poblacion_cupo.txt", sep="\t")
+
+#########################################################################
+#########################################################################
+#########################################################################
+##juntamos las bases agregadas: creamos la base a analizar: base
+
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\base")
+cupo<-read.table("poblacion_cupo.txt", header = TRUE, sep = "")
+summary(cupo)
+op_final<-read.table("oferta_preferente.txt", header = TRUE, sep = "")
+summary(op_final)
+
+dupli<-duplicated(cupo$cupo)
+summary(dupli)
+dupli<-duplicated(op_final$cupo)
+summary(dupli)
+
+base<-merge(cupo,op_final,by=c("cupo"),all=TRUE)
+summary(base)
+
+write.table(base, "d:/perfiles/29032475n/Escritorio/cupoplusop.txt", sep="\t")
+
+
+
+################################################
+################################################
+################################################
+#####Depuraci?n de la base
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\base")
+base<-read.table("cupoplusop.txt", header = TRUE, sep = "")
+summary(base)
+
+###1614 cupos
+###Hay 3 cupos de la estratificaci?n que no est?n en la Oferta preferente y 151 que no est?n
+
+sum(cupo$numcupos)
+sum(base$numcupos,na.rm=TRUE)
+sum(op_final$op)
+sum(base$op,na.rm=TRUE)
+
+
+
+##quitamos los cupos que no tienen OP y que no est?n en la base de la estratificaci?n (1463)
+
+base<-subset(base,!is.na(op))
+base<-subset(base,!is.na(numcupos))
+sum(base$numcupos)
+sum(base$num)
+
+summary(base)
+###quitamos cupos que no tienen OP completa epoc (48) m?s hta (3)-->quedan 1412 cupos
+
+base<-subset(base,!is.na(porc_epoc2))
+sum(base$numcupos)
+summary(base)
+
+base<-subset(base,!is.na(porc_hta3))
+sum(base$numcupos)
+sum(base$num)
+summary(base)
+
+###quitamos cupos menores 500. Darle una vuelta ()--->1368
+
+base<-subset(base,num>=500)
+sum(base$numcupos)
+sum(base$num)
+summary(base)
+
+
+###quitamos totosaldea y uap rioja (1320)
+
+base<-subset(base,!osi=="OSI TOLOSALDEA")
+base<-subset(base,!uap==5013)
+table(base$osi)
+sum(base$numcupos)
+sum(base$num)
+summary(base)
+
+
+
+#######
+#######
+##cerramos la base
+write.table(base, "d:/perfiles/29032475n/Escritorio/EDUARDO/VARIABILIDAD CLINICA/beca esteve/2015/base/base.txt", sep="\t")
+
+#########
+##########
+##########
+#######
+##########
+#########
+##################
+##########
+##########
+#######
+##########
+#########
+##################
+##########
+##########
+#######
+##########
+#########
+#########
+#########
+##########
+##########
+#######
+##########
+#########
+#########
+###leer la base
+
+setwd("d:\\perfiles\\29032475n\\Escritorio\\EDUARDO\\VARIABILIDAD CLINICA\\beca esteve\\2015\\base")
+library(Hmisc)
+base<-read.table("base.txt", header = TRUE, sep = "")
+
+##oferta preferente_medida c?lculo global
+colnames(base)
+base$porc_htatot<-100*(base$cump_hta1+
+base$cump_hta2+
+base$cump_hta3+
+base$cump_hta4+
+base$cump_hta5+
+base$cump_hta6)/
+(base$pob_hta1+
+base$pob_hta2+
+base$pob_hta3+
+base$pob_hta4+
+base$pob_hta5+
+base$pob_hta6)
+
+base$porc_dmtot<-100*(base$cump_dm1+
+base$cump_dm2+
+base$cump_dm3+
+base$cump_dm4+
+base$cump_dm5+
+base$cump_dm6+
+base$cump_dm7+
+base$cump_dm8)/
+(base$pob_dm1+
+base$pob_dm2+
+base$pob_dm3+
+base$pob_dm4+
+base$pob_dm5+
+base$pob_dm6+
+base$pob_dm7+
+base$pob_dm8)
+
+base$porc_epoctot<-100*(base$cump_epoc1+
+base$cump_epoc2+
+base$cump_epoc3+
+base$cump_epoc4)/
+(base$pob_epoc1+
+base$pob_epoc2+
+base$pob_epoc3+
+base$pob_epoc4)
+
+summary(base)
+
+
+##para en la diabetes regresi?n logistica
+base$hpe_dm_bin<-0
+base$hpe_dm_bin[base$hpe_dm>=1]<-1
+
+#######################################################
+#######################################################
+###cobertura: proporci?n de poblaci?n objetivo de la intervenci?n (denominadores en Oferta preferente)/poblaci?n identificada (ej:epoc, hta, dm)
+summary(base)
+base$cobdm<-base$pob_dm8/base$dm
+base$cobepoc<-base$pob_epoc4/base$epoc
+base$cobhta<-base$pob_hta6/base$hta
+
+
+####################
+####categorizar las variables
+library(gtools)
+colnames(base)
+base$cathta1<-quantcut(base$porc_hta1, q=5, na.rm=TRUE)
+base$cathta2<-quantcut(base$porc_hta2, q=5, na.rm=TRUE)
+base$cathta3<-quantcut(base$porc_hta3, q=5, na.rm=TRUE)
+base$cathta4<-quantcut(base$porc_hta4, q=5, na.rm=TRUE)
+base$cathta5<-quantcut(base$porc_hta5, q=5, na.rm=TRUE)
+base$cathta6<-quantcut(base$porc_hta6, q=5, na.rm=TRUE)
+base$cathtatot<-quantcut(base$porc_htatot, q=5, na.rm=TRUE)
+
+base$catepoc1<-quantcut(base$porc_epoc1, q=5, na.rm=TRUE)
+base$catepoc2<-quantcut(base$porc_epoc2, q=5, na.rm=TRUE)
+base$catepoc3<-quantcut(base$porc_epoc3, q=5, na.rm=TRUE)
+base$catepoc4<-quantcut(base$porc_epoc4, q=5, na.rm=TRUE)
+base$catepoctot<-quantcut(base$porc_epoctot, q=5, na.rm=TRUE)
+
+base$catdm1<-quantcut(base$porc_dm1, q=5, na.rm=TRUE)
+base$catdm2<-quantcut(base$porc_dm2, q=5, na.rm=TRUE)
+base$catdm3<-quantcut(base$porc_dm3, q=5, na.rm=TRUE)
+base$catdm4<-quantcut(base$porc_dm4, q=5, na.rm=TRUE)
+base$catdm5<-quantcut(base$porc_dm5, q=5, na.rm=TRUE)
+base$catdm6<-quantcut(base$porc_dm6, q=5, na.rm=TRUE)
+base$catdm7<-quantcut(base$porc_dm7, q=5, na.rm=TRUE)
+base$catdm8<-quantcut(base$porc_dm8, q=5, na.rm=TRUE)
+base$catdmtot<-quantcut(base$porc_dmtot, q=5, na.rm=TRUE)
+
+base$cat64<-quantcut(base$mayor64prop, q=5, na.rm=TRUE)
+base$catmuj<-quantcut(base$mujerprop, q=5, na.rm=TRUE)
+base$catpriv<-quantcut(base$priv, q=5, na.rm=TRUE)
+base$catpesotot<-quantcut(base$pesotot, q=5, na.rm=TRUE)
+base$catpesodm<-quantcut(base$pesodm, q=5, na.rm=TRUE)
+base$catpesoepoc<-quantcut(base$pesoepoc, q=5, na.rm=TRUE)
+base$catpesoicc<-quantcut(base$pesoicc, q=5, na.rm=TRUE)
+
+base$catdm<-quantcut(base$dmprop, q=5, na.rm=TRUE)
+base$catepoc<-quantcut(base$epocprop, q=5, na.rm=TRUE)
+base$caticc<-quantcut(base$iccprop, q=5, na.rm=TRUE)
+base$cathta<-quantcut(base$htaprop, q=5, na.rm=TRUE)
+base$catlip<-quantcut(base$lipidprop, q=5, na.rm=TRUE)
+
+base$catvacunaepoc<-quantcut(base$vacunaepocprop, q=5, na.rm=TRUE)
+base$catvacuna<-quantcut(base$vacunaprop, q=5, na.rm=TRUE)
+
+base$catieca<-quantcut(base$iecaprop, q=5, na.rm=TRUE)
+base$catantidm<-quantcut(base$antidmprop, q=5, na.rm=TRUE)
+base$catado<-quantcut(base$adopro, q=5, na.rm=TRUE)
+base$catinsul<-quantcut(base$insulpro, q=5, na.rm=TRUE)
+
+base$lnpob<-log(base$num)
+
+
+summary(base)
+
+colnames(base)
+###hay pocos epoc evaluados en relaci?n a la prevalencia de EPOC
+
+###
+plot(base$cat64,base$hpeprop_tot)
+plot(base$cat64,base$hpeprop_epoc)
+plot(base$cat64,base$hpeprop_icc)
+
+plot(base$catmuj,base$hpeprop_tot)
+plot(base$catmuj,base$hpeprop_epoc)
+plot(base$catmuj,base$hpeprop_icc)
+
+plot(base$catpriv,base$hpeprop_tot)
+plot(base$catpriv,base$hpeprop_epoc)
+plot(base$catpriv,base$hpeprop_icc)
+
+plot(base$catpesotot,base$hpeprop_tot)
+plot(base$catpesotot,base$hpeprop_epoc)
+plot(base$catpesotot,base$hpeprop_icc)
+
+plot(base$catpesodm,base$hpeprop_dm)
+plot(base$catpesoepoc,base$hpeprop_epoc)
+plot(base$catpesoicc,base$hpeprop_icc)
+plot(base$catpesotot,base$hpeprop_tot)
+
+plot(base$catdm,base$hpeprop_dm)
+plot(base$catepoc,base$hpeprop_epoc)
+plot(base$caticc,base$hpeprop_icc)
+plot(base$cathta,base$hpeprop_icc)
+plot(base$catlip,base$hpeprop_icc)
+
+plot(base$catvacunaepoc,base$hpeprop_tot)
+plot(base$catvacunaepoc,base$hpeprop_epoc)
+plot(base$catvacunaepoc,base$hpeprop_icc)
+
+###la vacuna en la poblaci?n es un proxy de edad y de patolog?a. 
+###Por eso seguramente los resultados contrarios cuando no se limita a la poblaci?n EPOC
+plot(base$catvacuna,base$hpeprop_tot)
+plot(base$catvacuna,base$hpeprop_epoc)
+plot(base$catvacuna,base$hpeprop_icc)
+
+plot(base$catieca,base$hpeprop_icc)
+
+##Los CBA (buenas pr?cticas)
+plot(base$catepoc1,base$hpeprop_epoc)
+plot(base$catepoc2,base$hpeprop_epoc)
+plot(base$catepoc3,base$hpeprop_epoc)
+plot(base$catepoc4,base$hpeprop_epoc)
+
+plot(base$cathta1,base$hpeprop_icc)
+plot(base$cathta2,base$hpeprop_icc)
+plot(base$cathta3,base$hpeprop_icc)
+plot(base$cathta4,base$hpeprop_icc)
+plot(base$cathta5,base$hpeprop_icc)
+plot(base$cathta6,base$hpeprop_icc)
+
+plot(base$catdm1,base$hpeprop_dm)
+plot(base$catdm2,base$hpeprop_dm)
+plot(base$catdm3,base$hpeprop_dm)
+plot(base$catdm4,base$hpeprop_dm)
+plot(base$catdm5,base$hpeprop_dm)
+plot(base$catdm6,base$hpeprop_dm)
+plot(base$catdm7,base$hpeprop_dm)
+plot(base$catdm8,base$hpeprop_dm)
+
+colnames(base)
+####################################################?
+####################################################
+#####################################################
+#####################################################
+###an?lisis (simplemente presento algunos an?lisis sencillos: hago poisson en vez de binomial negativa y 
+##de momento no meto la uap como variable aleatoria). hago log?stica para dm (si/no ingreso en el cupo)
+
+require(lme4)
+
+base$lnpob<-log(base$num)
+
+summary(ptotx<-glmer(hpe_tot~offset(lnpob)+(1|uap),family="poisson",data=base))
+
+
+summary(ptot<-glm(hpe_tot~offset(lnpob),family="poisson",data=base))
+pchisq(2 * (logLik(ptotx) - logLik(ptot)), df = 1, lower.tail = FALSE)
+logLik(ptot)
+logLik(ptotx)
+
+#####parece que tiene sentido ajustar por UAP (variable aleatoria) pero de momento no la introduzco
+
+base$osi <- relevel(base$osi, ref = "OSI BIDASOA")
+
+summary(ptot<-glm(hpe_tot~osi+offset(lnpob),family="poisson",data=base))
+
+
+exp(ptot$coefficients)
+exp(confint(ptot))
+
+exp(pepoc$coefficients)
+exp(confint(pepoc))
+######################
+
+####variables de ajuste
+
+summary(ptot<-glm(hpe_tot~osi+offset(lnpob),family="poisson",data=base))
+summary(ptot<-glm(hpe_tot~catmuj+offset(lnpob),family="poisson",data=base))
+summary(ptot<-glm(hpe_tot~cat64+offset(lnpob),family="poisson",data=base))
+summary(ptot<-glm(hpe_tot~catpriv+offset(lnpob),family="poisson",data=base))
+summary(ptot<-glm(hpe_tot~catpesotot+offset(lnpob),family="poisson",data=base))
+
+summary(picc<-glm(hpe_icc~osi+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~catmuj+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cat64+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~catpriv+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~catpesoicc+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~caticc+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~catlip+offset(lnpob),family="poisson",data=base))
+
+summary(picc<-glm(hpe_icc~catieca+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta1+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta2+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta3+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta4+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta5+offset(lnpob),family="poisson",data=base))
+summary(picc<-glm(hpe_icc~cathta6+offset(lnpob),family="poisson",data=base))
+
+summary(pepoc<-glm(hpe_epoc~osi+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catmuj+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~cat64+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catpriv+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catpesoepoc+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catepoc+offset(lnpob),family="poisson",data=base))
+
+
+
+base$osi <- relevel(base$osi, ref = "OSI DONOSTIALDEA")
+summary(pdm<-glm(hpe_dm_bin~catmuj+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~cat64+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catpriv+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catpesodm+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm+num,family=binomial(logit),data=base))
+
+
+
+summary(pepoc<-glm(hpe_epoc~catvacunaepoc+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catepoc1+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catepoc2+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catepoc3+offset(lnpob),family="poisson",data=base))
+summary(pepoc<-glm(hpe_epoc~catepoc4+offset(lnpob),family="poisson",data=base))
+
+summary(pdm<-glm(hpe_dm_bin~catantidm+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catado+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catinsul+num,family=binomial(logit),data=base))
+
+summary(pdm<-glm(hpe_dm_bin~catdm1+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm2+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm3+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm4+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm5+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm6+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm7+num,family=binomial(logit),data=base))
+summary(pdm<-glm(hpe_dm_bin~catdm8+num,family=binomial(logit),data=base))
+
+
+
+
+
+```
+
