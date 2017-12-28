@@ -1,0 +1,597 @@
+---
+title: "HPEpaper"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Los ficheros individuales estan en Descargas/HPE_esteve/bases
+
+Discutimos que hacer con este paper que fue rechazado, se habia trabajado bastante, era un ecologico en el que se valoraba si el cumplimiento de los procesos en primaria (% de TA, HBglicada etc..) se correspondian con menos hospitalizaciones evitable, habia tambien datos socioeconomicos (del nivel socioeconomico promedio del area atendido por el ospital -o de la zbs donde se situaba?) y se encontraba que solo esta variable se asociaba a la HPE.
+
+Ahora se plantea trabajar con informacion mas fina y actualizada.. esta la base individual, pero (para outcome y algo mas desagregada para socioeconomico -el de la zona basica de residencia-) y se plantea replicar aquel trabajo 
+
+Os mando la base agrupada (base.txt) junto con un Word con las variables y una sintaxis (análisis.R) con algún análisis previo.
+ 
+Hay una variable “nueva” que es pesotot, pesodm, pesohta, peso epoc. Esta variable se basa en los ACGs. Lo que he hecho ha sido dar un peso a cada ACG en relación a las HPE (nºHPE/personas con un ACG)/(nºHPE/personas total). Luego sumo los pesos en cada cupo y divido por el nº de personas. No sé si le veis el sentido, si eso se quita.
+ 
+ Los ACG clasifican a cada paciente en uno de las 105 categorías ACG. Son excluyentes (1 categoría ACG por persona). Se supone que los pacientes que están un mismo ACG comparten mismo patrón de morbilidad y uso de recursos sanitarios. Con esa lógica he asumido que podríamos representar una medida de morbilidad (que prediga cada HPE) de cada cupo y para eso:
+ 
+En cada categoría ACG veo cuántas personas hay y cuántas  HPE generaron y asumo que el valor que da es el peso que tiene cada categoría ACG. Luego lo he dividido entre nºHPE/total población para normalizarlo de alguna manera (aunque este paso podría sobrar).
+Luego cojo a nivel de cupo y sumo todos los pesos que generan las personas dentro del cupo y lo divido por el número de personas en el cupo. Esto me dará como un score a nivel de grupo que predice HPE.
+No sé si se entiende, si tiene sentido o si no están bien hechos los pasos.
+ 
+ Mando las categorías ACG
+ 
+ 
+ REUNION 11-12-17
+ 
+ -> Pregunta: son efectivas las diversas intervenciones incluidas en la oferta preferente (OP) para prevenir hospitalizaciones evitables
+ 
+ -> Sobre la OP
+  -  base op, osi (area sanitaria-hospitalaria), 1466 cupos, con indicadores (y sus poblaciones de referencia) para hta (6), epoc (4), d
+  - QUEDAMOS EN REDUCIR O CLASIFICAR ESOS INDICADORES EN BASE A LA EVIDENCIA QUE LOS SUSTENTA.. FELIPE ENVIA UNA TABLA que hay que completar para ver a que variable corresponde y que criterio de edad se aplica a ese indicador (ver abajo)
+  - el analisis primero se hara para cada uno de los outcome por separado (aqui estamos ante un compositive y vendra bien explorar los modelos que trabajan con una matriz de variables resultados): HPE_epoc/dm/icc [en esta ultima tenemos la intervencion por y prevalencia de hta, tb dislipemia?].. 
+  
+  - hay un debate previo acerca del denominador a aplicar: si la poblacion general, si aquellos registrados..., y sobre esto 'ultimo, donde?.. resulta que la op se aplica sobre lo registrado en primaria (los denominadores -segun indicador- que aparecen en la base op), pero la base individual que manejamos "ind" tiene variables indicador para dm,hta,icc... (ademas de farmacos etc), que no solo se basan en la fuente primaria, tambien lo definan a partir de  farmacos (salvo epoc) y empleando no solo fuentes de AP (son las definicion x ACG).. 
+      - el transfondo del debate es que la medida de prevalencia basada en AP puede estar sesgada, segun medico, incluso segun medico-patologia, podemos encontrar criterios de diagnostico con umbrales de sensibilidad-especificidad diferenciados.. Como determinar e incorporar en los modelos estos umbrales?.. 
+        a. analizando en un modelo vacio, o ajustado por composicion de edad-sexo del cupo, la propension de cada centro, marcando los que difieran significativamente del comportamiento medio// b. contrastando las prevalencias que marcan los ACG frente a la que se marca en AP-op
+        
+  -  Volviendo al analisis, se tratara de ir por capas, las poblaciones seran las que marquen los ACG, se aplicara alguna restriccion DE EDAD QUE AUMENTE LA PROBABILIDAD DE OUTCOME (INCIDENCIA DE HPE), con modelos que parten de CONOCER LA VARIABILIDAD A NIVEL DE OSI - CUPO, y las relaciones -particion de varianza- entre ellas.. para ir explicando estas variaciones a medida que se incorporan variables de composicion de los cupos (edad [HAY QUE DECIDIR COMO SE TRABAJARA LA MODELIZACION DE LA EDAD / SPLINE?], sexo..), Y POR ULTIMO, DE LO QUE QUEDA SIN EXPLICAR.. VER SI LAS INTERVENCIONES AYUDAN A EXPLICAR ALGO (TIPO A EN NIVEL DE EVIDENCIA Y EN CONTRASTE LAS NO A)
+  
+  - me viene a la cabeza este trabajo de HPE que emplean ECUACIONES ESTRUCTARELES.. (BUSCAR REF) - veo que el stata tiene opciones tanto para "efectos del tratamiento", con diversos esquemas de apareamiento... como para ecuaciones estructurales
+
+
+Reunion con berta 
+
+
+
+
+
+
+
+
+
+    Supplementary file. Good practice indicators included in the study. Source of evidence and grade of recommendation following the Scottish Intercollegiate Guidelines Network (SIGN).
+
+Aquí tienes la correspondencia: MARCO CON X LOS QUE HAY QUE USAR (TIPO A o B)
+ 
+DIABETES:
+ Hay 3 grado de recomendacion B
+ 
+CBA1: estudio analítico básico
+(mediana=37,7%)
+CBA2: control periódico de enfermería
+CBA3: cuidado de los pies
+CBA4: revisión oftalmológica X
+CBA5: cálculo del riesgo coronario
+CBA6: buen control TA X
+CBA7: buen control tabaquismo
+CBA8: buen control HbA1c X (esto es cada 6 meses - por eso no es A, no esta relacionado...-
+ 
+EPOC:
+ 
+CBA1: dg mediante espirometría
+CBA2: espirometría trienal
+CBA3: uso de inhaladores
+CBA4: buen control tabaquismo X
+_CBA5 corrsponde a vacuna (base individual) X
+
+Todas las variables estan a 1 de sep 2014.. las evitables esta a un anyo mas tarde.(1 sep-agosto del anyo siguiente) vacuna por tanto -en el indivudual- indica que se ha vacunado en 2014 (grie es entre septiembre-).. por tanto a) se agrega y se crea el CBA5.. y la otra es tratara individualmente
+ 
+ICC (con la salvedad que hemos dicho antes de que son, en realidad, CBAs para el control de la HTA)
+ 
+CBA1: estudio analítico básico 
+CBA2: estudio analítico periódico
+CBA3: cálculo del riesgo coronario
+CBA4: control de enfermería
+CBA5: estudio ECG
+CBA6: buen control TA X
+
+
+
+
+
+DISEASE
+INDICATOR OF GOOD PRACTICE (intervals between assessments should be as stated or less) 
+Grade 
+
+DIABETES39-43
+
+Basic laboratory tests: on diagnosis, blood glucose, HbA1C and creatinine levels, and albumin/creatinine ratio
+D
+
+Regular nurse-led monitoring: blood pressure measurement or ambulatory blood pressure monitoring; weight measurement; and every 4 months, advice on: smoking, alcohol consumption, self-testing and self-management
+D
+
+Foot care: yearly assessment of appearance, sensation (monofilament test), pedal pulse, and Ankle Brachial Index, if appropriate; investigation of symptoms; and risk classification on the basis of diastolic blood pressure 
+D
+
+Eye exam: initial assessment, with retinopathy screening or referral to an ophthalmologist; and repeat every 3 years if normal 
+B
+
+Estimation of coronary risk: risk calculated annually using the REGICOR chart
+C
+
+Good blood pressure monitoring: assessment of whether ≤140/80 mm Hg, or 135/85 mm Hg with ambulatory blood pressure monitoring, every 6 months
+B
+
+Good smoking habit monitoring
+D
+
+Good HbA1c control monitoring: every 6 months,  assessment of whether HbA1c<7%
+B
+
+COPD44-50
+Diagnosis based on spirometry: % of patients labelled with COPD that have undergone at least one post-bronchodilator spirometry test 
+D
+
+Spirometry:   every 3 years
+D
+
+Check of  inhaler technique
+D
+
+Good  smoking habit monitoring
+A
+
+Annual influenza vaccination
+A
+
+CONGESTIVE HEART FAILURE39.51-55
+Basic laboratory tests: complete blood count, blood glucose, creatinine, sodium, potassium, cholesterol, triglycerides,  and high- and low-density lipoprotein levels, sedimentation rate, and albumin/creatinine ratio 
+D
+
+Regular laboratory tests: at least every 3 years,  blood glucose level, lipid profile,  and albumin/creatinine ratio as well as ion levels if taking diuretics and/or angiotensin-converting-enzyme inhibitors or angiotensin II receptor antagonists
+D
+
+Estimation of coronary risk: risk calculated at the time of diagnosis using the REGICOR chart33 
+D
+
+Regular nurse-led monitoring: every 6 months, following the nursing care plan or a check-up that includes: 1-  blood pressure measurement or ambulatory blood pressure monitoring; 2- assessment of treatment adherence and any side effects; 3- advice on lifestyle modification (at least one of the following): smoking, alcohol consumption, diet or exercise; 4- weight measurement, at least once a year; and 5- calculation of cardiovascular risk (REGICOR)
+D
+
+Electrocardiogram: at the time of diagnosis of the disease and, subsequently, every 5 years if normal 
+D
+
+Good blood pressure monitoring: assessment of whether ≤140/80 mm Hg, or 135/85 mm Hg with ambulatory blood pressure monitoring (every 12 months):
+B
+
+ 
+Filtros y un par de modelos para el estudio sobre oferta preferente.
+
+# Preparacion
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(echo = FALSE, include = FALSE)
+```
+
+```{r directorio_paquetes}
+# Lectura de datos ------
+#setwd("D:/perfiles/72480965F/Mis Documentos/Proyectos/Esteve/201711")
+
+# Paquetes
+require(Hmisc)
+library(dplyr)
+library(tidyr)
+library(lme4)
+library(knitr)
+library(gtools)
+```
+
+## Leer datos
+```{r lectura_ficheros}
+rm(list=ls())
+### INES
+# Ficheros individual y agregado
+# individual <- read.table(file = "D:/perfiles/72480965F/Mis Documentos/Proyectos/Esteve/201711/datos/poblacion_individual_junta.txt", header = TRUE, sep = "")
+# oferta <- read.table(file = "D:/perfiles/72480965F/Mis Documentos/Proyectos/Esteve/201711/datos/oferta_preferente.txt", header = TRUE, sep = "")
+
+### JULI
+
+setwd("~/Documents/Proyectos/osakidetza/HPE/base")
+#base <-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/base.txt", header = TRUE, sep = "")
+#baseop <-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/cupoplusop.txt", header = TRUE, sep = "")
+#pobcu<-  read.table("~/Documents/Proyectos/osakidetza/HPE/base/poblacion_cupo.txt", header = TRUE, sep = "")
+  # en esta base estan los numeradores y denominadores globales,  los pesos que plantean LA GRAVEDAD ? segun ACG??..
+
+oferta<-  read.table("oferta_preferente.txt", header = TRUE, sep = "")
+# en esta bse estan separados los indicadores de procesos, decidimos seleccionar aquellos de mayor evidentica: tipo A y B
+
+# entre baseop y oferta se pasa de 1617 a 1466 cupos.. entiendo que ahi esta aplicado el filtro
+individual<-  read.table("poblacion_individual_junta.txt", header = TRUE, sep = "")
+
+# HEMOS DECIDIDO HACER, RESPECTO A LAS RESTRICCIONES DE EDAD, HACER TRES ANALISIS: SIN ELLA (>14); >40 Y >65
+# 
+# indf <- filter(ind,edad>65) 
+#  summary(indf$hpe_tot)
+ #     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+ # 0.00000  0.00000  0.00000  0.01413  0.00000 11.00000 
+
+
+ 
+
+########## Ines me envio nuevas tablas y su paquete con las tablas de ICC [una idea de articulo seria replicar esta evaluacion de las intervenciones de AP -en concreto el control de la TA- obteniendo los datos de las tablas icc para disponer de la informacion individual tanto de la exposicion como del resultado!]
+
+# el paquete con las bases icc es COHORTEICC
+
+# recibo tambien las tablas con los casos de epoc,dm,icc segun constan en los diagnosticos de primaria -asi podemos contrastar el denominador..: diabetes_ ; hta_; icc_ ; epoc_ap
+
+
+ 
+```
+
+```{r lectura_dgs_AP}
+###  ESTOS SON LOS DENOMINAODRES INDIVIDUALES DE AP (DIFERENTE DE LOS CONCEPTOS -ACG QUE ESTAN EN LA BASE INDIVIDUAL)
+
+# Lectura de listados de pacientes diagnosticados en AP 
+# HTA
+# Pacientes con Diagnostico en AP
+hta_ap <- read.csv2(file = "hta_ap.csv", header = T)
+names(hta_ap) <- "id_paciente"
+#hay ceros
+hta_ap %>% filter(id_paciente != 0) -> hta_ap
+
+# EPOC
+# Pacientes con Diagnostico en AP
+epoc_ap <- read.csv2(file = "epoc_ap.csv", header = T)
+names(epoc_ap) <- "id_paciente"
+#hay ceros
+epoc_ap %>% filter(id_paciente != 0) -> epoc_ap
+
+# DIABETES
+# Pacientes con Diagnostico en AP
+dm_ap <- read.csv2(file = "diabetes_ap.csv", header = T)
+names(dm_ap) <- "id_paciente"
+#hay ceros
+dm_ap %>% filter(id_paciente != 0) -> dm_ap
+```
+
+
+# Filtros basicos
+
+```{r identificar_osis_cupos}
+
+# Identificar osis y cupos
+filtrarosis <- c("DIRECCION DE ASISTENCIA SANITARIA", "SIN DETERMINAR", "OSI TOLOSALDEA")
+cupos_rioja <- individual %>% filter( uap == 5013) %>% dplyr::select(cupo) %>% unique()
+cupos_rioja <- cupos_rioja$cupo
+
+#identificar cupos con oferta incompleta
+oferta %>% filter(is.na(porc_epoc2)) %>% select(cupo) -> cupos_ofertaincompleta
+```
+
+## Filtros basicos en fichero nivel individual
+```{r filtros_individual}
+individual %>% filter( com != "OS22") -> individual #OSI Tolosaldea
+individual %>% filter( uap != 5013 ) -> individual #UAP Rioja Alavesa
+```
+
+## Filtros basicos en fichero agregado
+```{r filtros_agregado}
+
+# Filtrar OSis y cupos
+oferta %>% filter(!(osi %in% filtrarosis)) -> oferta
+oferta %>% filter(!(cupo %in% cupos_rioja)) -> oferta
+
+# Filtrar cupos con datos completos cumplimiento
+#aplicar
+oferta %>% filter(!is.na(porc_epoc2)) -> oferta
+```
+
+## Coherencia entre ficheros
+* En el fichero individual quitamos los pacientes pertenecientes a cupos eliminados.
+
+```{r filtros_coherencia, include=TRUE}
+individual %>% filter(cupo %in% oferta$cupo) -> individual
+cat("Filas fichero individual:\n")
+nrow(individual) # 1890664
+cat("Filas fichero agregado:\n")
+nrow(oferta) # 1373
+```
+
+
+# Transformaciones previas
+```{r transformaciones_previas}
+# Recuperar nombre de osi en fichero individual 
+oferta %>% select(osi, cupo) %>% right_join(individual) -> individual
+# Recuperar la UAP en oferta
+individual %>% select(uap, cupo) %>% unique() %>% right_join(oferta) -> oferta
+
+#eliminar variables superficiales
+oferta$op <- NULL #constante, 1
+```
+
+## Adjuntar datos de diagnosticos de AP 
+```{r REPASAR datos_diagnosticosAP, include=TRUE}
+
+table(ind$dm, ind$dm_ap)
+  #         0       1
+  # 0 1744045    3863
+  # 1    8714  129207
+# curioso, tambien se dan casos con diagnostico en ap que no estan en acg!!!
+
+# QUE DENOMINADORES PARA EL ANALISIS? DEBE SER COHERENTE CON LA OP..
+
+ ## COMPAREMOS LOS DENOMINADORES HAY 3 POSIBLES (HACERLO POR CUPO)
+ # EPOC-ACG
+ # EPOC-AP (INDEENDIENTE DE LA OFERTA PREFERENTE??? /QUE REQUIERE ESPIROMETRIA/) 
+ # EPOC-OP COGEMOS EL DENOMINADOR MAYOR???
+
+
+# Recuperar datos de Diagnosticos de AP, en fichero individual 
+individual %>% mutate(dm_ap =  ( id_paciente %in% dm_ap$id_paciente ) * 1,
+                      hta_ap =  ( id_paciente %in% hta_ap$id_paciente ) * 1,
+                      epoc_ap =  ( id_paciente %in% epoc_ap$id_paciente ) * 1) -> individual
+
+table(individual$dm_ap) # 133070 tendrian DM segun Osabide AP
+table(individual$dm) # 137923 tendrian DM segun todas las fuentes
+cat("DM codificados en AP:\n")
+133070 / 137923 #un 96%
+
+table(individual$hta_ap) # 358,836 tendrian HTA segun Osabide AP
+table(individual$hta) # 424,227 tendrian HTA   segun todas las fuentes
+cat("HTA codificados en AP:\n")
+358836 / 424227 #un 84%
+
+table(individual$epoc_ap) # 39,554 tendrian epoc segun Osabide AP
+table(individual$epoc) # 50,507 tendrian epoc segun todas las fuentes
+cat("EPOC codificados en AP:\n")
+39554 / 50507 #un 78%
+
+rm(dm_ap, epoc_ap, hta_ap)
+
+```
+
+# Seleccion de poblacion
+
+### Tamanyo de cupos
+```{r explorar_tamanyo_cupos, include=TRUE}
+# Tamanyo cupos
+individual %>% group_by(cupo) %>% summarise(n=n()) %>% summary
+#Cupos con un solo paciente!, mirar
+individual %>% group_by(cupo) %>% summarise(n=n()) %>% filter(n == 1) %>% head()
+individual %>% filter(cupo == 22997) 
+#Pintar distribucion por OSIs
+individual %>% 
+  group_by(cupo, osi) %>% 
+  summarise(n=n()) %>% 
+  # filter(n > 1) %>%
+  ungroup() %>% 
+  ggplot2::ggplot(aes(x = n)) + geom_histogram() + facet_grid(osi~.) 
+```
+
+```{r seleccion_cupos n >= 1000}
+
+individual %>% 
+  group_by(cupo) %>% 
+  summarise(n=n()) %>% 
+  filter(n >= 1000) %>% ungroup() %>% select(cupo) -> cupos_m_N
+
+#estimar numero de cupos
+oferta %>% filter(cupo %in% cupos_m_N$cupo) %>% nrow() #1263  1268 !!! 5 MAS QUE INES!
+
+```
+
+
+### Edad de los individuos (prevalencias minimas)
+
+```{r filtro_edad, include=TRUE}
+# Filtro basico; mayores de 14 
+individual %>% filter(edad >= 14) -> individual
+cat("Filas fichero individual con mayores 14:\n")
+nrow(individual) #1885829
+# Crear edad quinquenal, histograma
+agebreaks <- seq(from=min(individual$edad), to=max(individual$edad), by=5)
+individual$edad_5 <- cut2(individual$edad, cuts=agebreaks)
+table(individual$edad_5)
+# histogram(individual$edad)
+```
+
+* Prevalencia por edades
+```{r prevalencia_edad}
+individual %>% group_by(edad_5) %>% summarise(hta_n = sum(hta),
+                                              hta_prop = round(sum(hta) / n() * 100,1),
+                                              dm_n = sum(dm),
+                                              dm_prop = round(sum(dm) / n() * 100,1),
+                                              epoc_n = sum(epoc),
+                                              epoc_prop = round(sum(epoc) / n() * 100,1)) %>%
+  knitr::kable("markdown", align = 'c', padding = 2)
+ 
+```
+
+
+
+# Modelos Poisson a nivel agregado (tentativa)
+## Preparar variables
+```{r preparar_variables AGREGADAS, not included}
+## HEMOS DECIDIDO ANALIZAR SOLO LOS PROCESOS CON EVIDENCIA A o B.. (aunque LOS OTROS PUEDEN SERVIR DE CONTROL!)
+
+
+# DIABETES:
+# CBA8: buen control HbA1c X 
+#  
+# EPOC:
+# CBA4: buen control tabaquismo X
+# CBA5 corrsponde a vacuna (base individual) X
+# 
+# Todas las variables estan a 1 de sep 2014.. las H.evitables esta a un anyo mas tarde.(1 sep-agosto del anyo siguiente) vacuna por tanto -en el indivudual- indica que se ha vacunado en 2014 (grie es entre septiembre-).. por tanto a) se agrega y se crea el CBA5.. y la otra se tratara individualmente  NO LO ACABO DE ENTENDER!!
+#  
+# ICC (EN REALIDAD CBAs ES el control de la HTA).. SE DECIDE X COHERENCIA RESTRINGUIR LOS ICC A AQUELLAS PERSONAS CON HTA
+# CBA6: buen control TA X
+
+
+
+
+
+# Categorizar porcentajes de cumplimiento
+# oferta$porc_hta1_cat<-quantcut(oferta$porc_hta1, q=5, na.rm=TRUE)
+# oferta$porc_hta2_cat<-quantcut(oferta$porc_hta2, q=5, na.rm=TRUE)
+# oferta$porc_hta3_cat<-quantcut(oferta$porc_hta3, q=5, na.rm=TRUE)
+# oferta$porc_hta4_cat<-quantcut(oferta$porc_hta4, q=5, na.rm=TRUE)
+# oferta$porc_hta5_cat<-quantcut(oferta$porc_hta5, q=5, na.rm=TRUE)
+oferta$porc_hta6_cat<-quantcut(oferta$porc_hta6, q=5, na.rm=TRUE)
+
+
+
+
+# adjuntar tamayo cupo
+individual %>% 
+  group_by(cupo) %>% 
+  summarise(n_cupo=n()) %>% right_join(oferta) -> oferta
+
+
+
+
+# adjuntar porcentaje mayores 64
+individual %>% 
+  group_by(cupo) %>% 
+  summarise(pmayor64=sum(mayor64)/n()) %>% right_join(oferta) -> oferta
+
+# adjuntar porcentaje Mujeres
+individual %>% 
+  group_by(cupo) %>% 
+  summarise(pmujer=sum(mujer)/n()) %>% right_join(oferta) -> oferta
+
+# adjuntar el outcome
+individual %>% 
+  group_by(cupo) %>% 
+  summarise(n_cupo=n(), 
+            hpe_dm = sum(hpe_dm),
+            hpe_icc = sum(hpe_icc),
+            hpe_epoc = sum(hpe_epoc),
+            hpe_tot = sum(hpe_tot)) %>% 
+  right_join(oferta) -> oferta
+
+```
+
+* Fichero filtrado (tamanyo cupos) - para estimar modelos
+```{r filtrar_cupos}
+oferta %>% filter(cupo %in% cupos_m_N$cupo) -> oferta_dat  # 1268
+```
+
+* Modelo Poisson sencillo
+```{r INES modelos_pruebas, not includet}
+str(oferta)
+mod0 <- MASS::glm.nb(hpe_epoc ~ offset(log(n_cupo)), data = oferta_dat)
+mod1 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + offset(log(n_cupo)), data = oferta_dat)
+mod2 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + pmujer + offset(log(n_cupo)), data = oferta_dat)
+summary(mod2)
+
+
+rm(mod0, mod1, mod2)
+```
+
+# Construir escala - grado de codificacion de los cupos
+```{r  BASES DE ANALISIS}
+
+# nos quedamos con oferta_dat (1268)
+rm(oferta, cupos_m_N, cupos_ofertaincompleta)
+
+
+# unique(individual$cupo) %>% length()
+# muestracupos <- sample(x = unique(oferta$cupo), size = 20)
+
+# SE DECIDE X COHERENCIA RESTRINGUIR LOS ICC A AQUELLAS PERSONAS CON HTA
+names(individual)
+
+### meto en df las variables que incluir'e en el modelo
+## HAY VARIABLES DE EXPOSICION EN LA INDIVIDUAL: VACUNA -SUPONGO QUE ES LA GRIPE-, PERO TB ESTA VACUNAEPOC??.. Y LIPID.. LUEGO DE LOS DM CREO QUE ES IMPORTANTE INSU ADO.. Y DE ICC... IECA.. VEO QUE ESTAN REPETIDOS INSU Y INSUL_DM.. 
+
+## HUBO UN DEBATE INICAL, TRABAJAMOS SOLO CON LOS DENOMINADORES QUE TOCAN..
+# DIABETES:
+# CBA8: buen control HbA1c X 
+#  
+# EPOC:
+# CBA4: buen control tabaquismo X
+# CBA5 corrsponde a vacuna (base individual) X
+
+
+
+### DESCUBRO ESTANDO AQUI QUE EL DM...ACG .. NO SIEMPRE INGLUYE EL DE AP!! -HABRA QUE REPASAR TODO LO ANTERIRO -CRITERIOS DE FILTRO..ETC
+
+ind <- dplyr::select(individual,id_paciente,osi,cupo,uap,com,edad,sexo, acg,priv,quintil,epoc,dm,hta,icc,vacuna,insu,ado,ieca,dm_ap,hta_ap,epoc_ap,  hpe_icc, hpe_epoc, hpe_dm, hpe_tot)  # podria meter en una misma variable si el diagnostico esta en ap o solo en otra fuente
+
+
+
+### Y TENDREMOS 3 BASES DE ANALISIS
+dmdf <- ind %>% filter(dm==1 | dm_ap==1) %>% # selecciono  diagnosticados en cualquier fuente pero guardo en ap (98%)
+ dplyr::select(id_paciente, acg, osi, cupo, edad, sexo, hta, epoc,  icc,   insu, ado, dm_ap,  hpe_dm) # hay otros 
+ ## hay que pegar la oferta$dm8.. y echar un ojo a su denominador
+
+iccdf<- ind %>% filter((icc==1)  & (hta==1 | hta_ap==1))%>% # selecciono los tienen hta en cualquier fuente, pero guardo diagnosticados en ap (?%)
+ dplyr::select(id_paciente,osi, cupo, edad, sexo, acg,dm,  epoc,  ieca, hta_ap, hpe_icc)
+  ## hay que pegar la oferta$hta5.. y echar un ojo a su denominador
+
+epocdf<- individual %>% filter(epoc==1 | epoc_ap==1) %>% # selecciono los tienen diagnosticados en alguna fuente (op-espirometria??)
+ dplyr::select(id_paciente, osi, cupo, edad, sexo, acg, dm,  icc,  vacuna, epoc_ap, hpe_epoc)
+ ## hay que pegar la oferta$epoc4.. y echar un ojo a su denominador (el 5, vacunas lo trabajamos individual y agregado!)
+
+
+rm(individual)
+rm(agebreaks, cupos_rioja, filtrarosis)
+save.image("dfHPE.Rdata")
+```
+
+
+
+
+
+
+```{r notas}
+
+
+names(ind)
+#  [1] "acg"   (una de 9x categorias, isoconsumo.. y criterio clinico)
+# [2]"id_paciente"
+# [3] "cupo"  
+# [4] "uap" 
+# [5] "com" 
+# [6] "edad" 
+# [7] "sexo"       
+#  [8] "numfarmac" (polimedicado??) no lo usame
+# "num" -borrar-
+# "priv"  MEDEA numerico
+# "quintil" MEDEA QUINTIL MEJOR!
+# "dm"          
+# "hta"  -este es otro de las variables que deberiamos elaborar        "epoc"       
+# [15] "icc"  ... esta no es una poblacion de oferta diferente .. en op es hta! mirar la relacion en estas cifras.. cuantos de los icc son hta.. este porcentaje varia.. QUITAR los icc que no tienen hta!!!
+
+#"lipid" -?  
+# "vacuna"  
+# "vacunaepoc" -no- 
+# "insu" - ....... son criterios de gravedad
+# "ado" -  
+# "ieca" ............son criterios de buena atencion que no aparecio en atencion preferente construir el indicador x cupo sobre los -icc / hipertensos     
+#  "insul_dm"    "ado_dm"      "antidm_dm"   "ieca_icc"    "antidm"      "hpe_icc"     "hpe_epoc"   
+# [29] "hpe_dm"      "hpe_tot"     "pesotot"     "pesodm"      "pesoepoc"    "pesoicc"     "mayor64"    
+# [36] "mujer"
+
+ind
+
+summary(ind)
+
+### nos quedamos solo con los que tengan alguna de las cronicas hpe.. (segun ACG )
+
+library(dplyr)
+ind <- mutate(ind, dei =paste0(dm, epoc, icc), collapse="")
+
+indei <- filter(ind, dei!="000")
+
+summary(indei)
+
+# en indei tenemos los denominadores.. la capa individuo del proyecto.. se entiende que según el indicador entraran o no como denominadores
+
+names(indei)
+
+# a esta base uniremos los indicadores de cupo
+
+
+```
+
