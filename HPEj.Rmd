@@ -180,7 +180,6 @@ knitr::opts_knit$set(echo = FALSE, include = FALSE)
 require(Hmisc)
 library(dplyr)
 library(tidyr)
-library(lme4)
 library(knitr)
 library(gtools)
 ```
@@ -410,9 +409,8 @@ individual %>% group_by(edad_5) %>% summarise(hta_n = sum(hta),
 
 # Modelos Poisson a nivel agregado (tentativa)
 ## Preparar variables
-```{r preparar_variables AGREGADAS, not included}
+```{r INDICADORES PROCESO preparar_variables AGREGADAS, not included}
 ## HEMOS DECIDIDO ANALIZAR SOLO LOS PROCESOS CON EVIDENCIA A o B.. (aunque LOS OTROS PUEDEN SERVIR DE CONTROL!)
-
 
 # DIABETES:
 # CBA8: buen control HbA1c X 
@@ -519,28 +517,285 @@ names(individual)
 ind <- dplyr::select(individual,id_paciente,osi,cupo,uap,com,edad,sexo, acg,priv,quintil,epoc,dm,hta,icc,vacuna,insu,ado,ieca,dm_ap,hta_ap,epoc_ap,  hpe_icc, hpe_epoc, hpe_dm, hpe_tot)  # podria meter en una misma variable si el diagnostico esta en ap o solo en otra fuente
 
 
+ind$medea3_cat<-quantcut(ind$priv, q=3, na.rm=TRUE)
+table(ind$medea3_cat)
+
+
+
 
 ### Y TENDREMOS 3 BASES DE ANALISIS
 dmdf <- ind %>% filter(dm==1 | dm_ap==1) %>% # selecciono  diagnosticados en cualquier fuente pero guardo en ap (98%)
- dplyr::select(id_paciente, acg, osi, cupo, edad, sexo, hta, epoc,  icc,   insu, ado, dm_ap,  hpe_dm) # hay otros 
+ dplyr::select(id_paciente, acg, osi, cupo, edad, sexo, priv, quintil, medea3_cat, hta, epoc,  icc,   insu, ado,dm, dm_ap,  hpe_dm) # hay otros 
  ## hay que pegar la oferta$dm8.. y echar un ojo a su denominador
 
 iccdf<- ind %>% filter((icc==1)  & (hta==1 | hta_ap==1))%>% # selecciono los tienen hta en cualquier fuente, pero guardo diagnosticados en ap (?%)
- dplyr::select(id_paciente,osi, cupo, edad, sexo, acg,dm,  epoc,  ieca, hta_ap, hpe_icc)
+ dplyr::select(id_paciente,osi, cupo, edad, sexo, priv, quintil,medea3_cat, acg,dm,  epoc,  ieca, hta, hta_ap, hpe_icc)
   ## hay que pegar la oferta$hta5.. y echar un ojo a su denominador
 
-epocdf<- individual %>% filter(epoc==1 | epoc_ap==1) %>% # selecciono los tienen diagnosticados en alguna fuente (op-espirometria??)
- dplyr::select(id_paciente, osi, cupo, edad, sexo, acg, dm,  icc,  vacuna, epoc_ap, hpe_epoc)
+epocdf<- ind %>% filter(epoc==1 | epoc_ap==1) %>% # selecciono los tienen diagnosticados en alguna fuente (op-espirometria??)
+ dplyr::select(id_paciente, osi, cupo, edad, sexo,priv, quintil,medea3_cat, acg, dm,  icc,  vacuna,epoc, epoc_ap, hpe_epoc)
  ## hay que pegar la oferta$epoc4.. y echar un ojo a su denominador (el 5, vacunas lo trabajamos individual y agregado!)
 
 
 rm(individual)
 rm(agebreaks, cupos_rioja, filtrarosis)
+rm(mnull, modm_0, modm_1, m1, p1, merMod)
+rm(dm2, icc2)
+rm(modm_2, modm_3)
+
+# introducimos los indicadores de proceso
+## HEMOS DECIDIDO ANALIZAR SOLO LOS PROCESOS CON EVIDENCIA A o B.. (aunque LOS OTROS PUEDEN SERVIR DE CONTROL!)
+
+# DIABETES: CBA8: buen control HbA1c X 
+#  
+# EPOC:
+# CBA4: buen control tabaquismo X
+# CBA5 corrsponde a vacuna (base individual) X
+# 
+
+# ICC (EN REALIDAD CBAs ES el control de la HTA).. SE DECIDE X COHERENCIA RESTRINGUIR LOS ICC A AQUELLAS PERSONAS CON HTA
+# CBA6: buen control TA X  (y vacuna)
+
+
+
+oferta_dat$porc_hta6_cat<-quantcut(oferta_dat$porc_hta6, q=3, na.rm=TRUE)
+oferta_dat$porc_epoc4_cat<-quantcut(oferta_dat$porc_epoc4, q=3, na.rm=TRUE)
+oferta_dat$porc_dm8_cat<-quantcut(oferta_dat$porc_dm8, q=3, na.rm=TRUE)
+  
+  
+ 
+
+dmdf <- inner_join(dmdf,dplyr::select(oferta_dat,cupo,porc_dm8, porc_dm8_cat))
+iccdf <- inner_join(iccdf,dplyr::select(oferta_dat,cupo,porc_hta6, porc_hta6_cat))
+epocdf<- inner_join(epocdf,dplyr::select(oferta_dat,cupo,porc_epoc4,porc_epoc4_cat))
+
+## chekear la coherencia por cupo de pob_dm8 y el agregado a partir de uni/dmdf
+rm(df.choices, cute, f, breakqdm)
+
 save.image("dfHPE.Rdata")
 ```
 
 
 
+```{r libraries ultinivel, include=FALSE}
+
+#rm(list=ls())
+library(sjstats)
+library(lme4)
+library(merTools)
+library(rms)
+library(coefplot)
+
+
+```
+
+```{r}
+
+
+### le agregamos a las bases la informacion
+# igual mejor terciles de medea que quintiles
+
+df
+
+load("dfHPE.Rdata")
+
+### los hpe son conteos.. esto quizas se aborda mejor con un zeroinflated poisson!!
+
+summary(iccdf)
+ICC("hpe_icc","osi",iccdf) #  0.001220938
+ICC("hpe_icc","cupo",iccdf) #  0.001834941
+
+ICC("hpe_dm","osi",dmdf) #   0.0001163572
+ICC("hpe_dm","cupo",dmdf) #  1.424784e-10
+
+ICC("hpe_epoc","osi",epocdf) #  0.0008188846
+ICC("hpe_epoc","cupo", epocdf) #  0.002512654
+
+summary(epocdf)
+
+cute <- function(df) {
+agebreaks <- seq(from=min(df$edad), to=max(df$edad), by=20)
+df$ageg20 <- cut2(df$edad, cuts=agebreaks) 
+return(data.frame(df))}
+
+##########  logisticas
+
+# 
+# dm2 <- cute(dmdf)
+# dm2$var2 <- ifelse(dm2$hpe_dm==0,0,1)
+icc2<- cute(iccdf)
+icc2$var2 <- ifelse(icc2$hpe_icc==0,0,1)
+
+# as.factor(quintil) igual mejor sacar terciles
+summary(icc2)
+
+#### icc
+moic_v<-glmer(var2~(1|cupo),family=binomial, data=icc2)
+moic_0<-glmer(var2~ageg20+sexo+(1|cupo),family=binomial, data=icc2)
+moic_1<-glmer(var2~ageg20+sexo+dm+ (1|cupo),family=binomial, data=icc2)
+moic_2<-glmer(var2~ageg20+sexo+dm+ medea3_cat + (1|cupo),family=binomial, data=icc2)
+moic_3<-glmer(var2~ageg20+sexo+dm+ medea3_cat + porc_hta6_cat + (1|cupo),family=binomial, data=icc2)
+moic_4<-glmer(var2~ageg20+sexo+dm+ medea3_cat*porc_hta6_cat + (1|cupo),family=binomial, data=icc2)
+
+
+moic_2
+summary(moic_3)
+coefplot( moic_2)
+coefplot( moic_3)
+#shinyMer(moic_0)
+plotREsim(REsim(moic_v))
+ 
+sjstats::icc(moic_3)
+
+
+
+#### epoc
+
+epoc2<- cute(epocdf)
+epoc2$var2 <- ifelse(epoc2$hpe_epoc==0,0,1)
+summary(epoc2) # Mean   :0.04463  
+
+moep_v<-glmer(var2~(1|cupo),family=binomial, data=epoc2)
+plotREsim(REsim(moep_v))
+sjstats::icc(moep_v)
+
+moep_0<-glmer(var2~ageg20+sexo+(1|cupo),family=binomial, data=epoc2)
+moep_1<-glmer(var2~ageg20+sexo+dm+ (1|cupo),family=binomial, data=epoc2)
+moep_2<-glmer(var2~ageg20+sexo+dm+ medea3_cat + (1|cupo),family=binomial, data=epoc2)
+moep_3<-glmer(var2~ageg20+sexo+dm+ medea3_cat + porc_epoc4_cat + (1|cupo),family=binomial, data=epoc2)
+moep_4<-glmer(var2~ageg20+sexo+dm+ medea3_cat*porc_epoc4_cat + (1|cupo),family=binomial, data=epoc2)
+
+
+moep_2
+summary(moep_4)
+coefplot( moep_2)
+coefplot( moep_3)
+coefplot( moep_4)
+#shinyMer(modm_0)
+
+
+## algo esta mal planteado en este fenomeno poisson, mirar lo del offset..
+
+### mirar lo de reescalar!!! 
+######### igual lo mejor es clasificar (pienso en el descriptivo) los cupos en terciles de deprivacion y de proceso, cruzarlos como en una interacci'on y mostrar en ese grid de 9 la distribucion del riesgo de ingreso..!
+
+
+
+
+require(pscl)
+require(boot)
+#library(glmmADMB)
+#vt4$grupo<-relevel( dat$grupo, ref="estandar")
+
+
+summary(m1 <- zeroinfl(hpe_dm ~ ageg20+sexo+ 1|osi, data = dm2))
+
+
+https://stats.idre.ucla.edu/r/dae/zip/
+  
+  # All of the predictors in both the count and inflation portions of the model are statistically significant. This model fits the data significantly better than the null model, i.e., the intercept-only model. To show that this is the case, we can compare with the current model to a null model without predictors using chi-squared test on the difference of log likelihoods.
+
+mnull <- update(m1, . ~ 1)
+pchisq(2 * (logLik(m1) - logLik(mnull)), df =15, lower.tail = FALSE)
+
+# Since we have three predictor variables in the full model, the degrees of freedom for the chi-squared test is 15. This yields a high significant p-value; thus, our overall model is statistically significant.
+# 
+# Note that the model output above does not indicate in any way if our zero-inflated model is an improvement over a standard Poisson regression. We can determine this by running the corresponding standard Poisson model and then performing a Vuong test of the two models.
+
+summary(p1 <- glm(hpe_dm ~ ageg20+sexo, family = poisson, data = dm2))
+
+vuong(p1, m1)
+
+
+# The Vuong test compares the zero-inflated model with an ordinary Poisson regression model. In this example, we can see that our test statistic is significant (depending of...!), indicating that the zero-inflated model is superior to the standard Poisson model.
+
+# We can get confidence intervals for the parameters and the exponentiated parameters using bootstrapping. For the Poisson model, these would be incident risk ratios, for the zero inflation model, odds ratios. We use the boot package. First, we get the coefficients from our original model to use as start values for the model to speed up the time it takes to estimate. Then we write a short function that takes data and indices as input and returns the parameters we are interested in. Finally, we pass that to the boot function and do 1200 replicates, using snow to distribute across four cores. Note that you should adjust the number of cores to whatever your machine has. Also, for final results, one may wish to increase the number of replications to help ensure stable results.
+
+dput(coef(m1, "count"))
+dput(coef(m1, "zero"))
+
+
+f <- function(data, i) {
+  require(pscl)
+  m <- zeroinfl(hpe_dm ~ ageg20+sexo+ 1|osi, data = dm2[i, ],
+    start = list(hpe_dm = c(-0.92, -1.18, -2.60, -1.81, -1.505, -0.45), zero = c(3.57, -0.22, -0.56, -0.21, 14.529, 0.71, -0.03, 0.96, -0.078, 0.25, 0.19)))
+  as.vector(t(do.call(rbind, coef(summary(m)))[, 1:2]))
+}
+
+set.seed(10)
+res <- boot(dm2, f, R = 1200, parallel = "snow", ncpus = 4)  # 16?
+
+## print results
+res
+
+
+The results are alternating parameter estimates and standard errors. That is, the first row has the first parameter estimate from our model. The second has the standard error for the first parameter. The third column contains the bootstrapped standard errors, which are considerably larger than those estimated by zeroinfl.
+
+Now we can get the confidence intervals for all the parameters. We start on the original scale with percentile and bias adjusted CIs. We also compare these results with the regular confidence intervals based on the standard errors.
+
+## basic parameter estimates with percentile and bias adjusted CIs
+parms <- t(sapply(c(1, 3, 5, 7, 9), function(i) {
+  out <- boot.ci(res, index = c(i, i + 1), type = c("perc", "bca"))
+  with(out, c(Est = t0, pLL = percent[4], pUL = percent[5],
+     bcaLL = bca[4], bcaLL = bca[5]))
+}))
+
+## add row names
+row.names(parms) <- names(coef(m1))
+## print results
+parms
+
+## compare with normal based approximation
+confint(m1)
+##########
+
+
+ almer<-glmer(death~edads+genero+wchars+cirev+tiping+(1|chos),family=binomial, data=pp3)
+ almery<-glmer(death~edads+genero+wchars+cirev+tiping+ yn+ (1|chos),family=binomial, data=pp3)
+ 
+ 
+ 
+ 
+ anova(almer,almery)
+ library(coefplot)
+ coefplot(almer,almerv)
+ 
+  
+oric<-function(mod){
+ se <- sqrt(diag(vcov(mod)))
+# # table of estimates with 95% CI
+ (exp(tab <- cbind(Est = fixef(mod), LL = fixef(mod) - 1.96 * se, UL = fixef(mod) + 1.96 * se)))
+}
+
+round(oric(almery),2)
+
+exp(tab)
+
+
+
+ predictions <- predict(almer, type = "response")
+
+  
+
+ plotROC(na.omit(pp2), 1,  predictions)
+ names(pp2)
+ 
+ 
+ shinyMer(almer)
+ 
+ plotREsim(REsim(almer))
+ 
+ summary(almer)
+m<-almer
+se <- sqrt(diag(vcov(m)))
+# table of estimates with 95% CI
+tab <- cbind(Est = fixef(m), LL = fixef(m) - 1.96 * se, UL = fixef(m) + 1.96 *  se)
+dimnames(tab)[[1]]<-c("(Intercept)", "edad"  , "hombre" , "i.charlson" ,  "cgi. abierta" , "urgente" )
+xtable(exp(tab), caption = "Odds ratio de mortalidad", digits=c(0,2,2,2))
+## odds ratio
+#qqmath(ranef(m, postVar = TRUE), strip = FALSE)$chos
+# 
+```
 
 
 
