@@ -222,7 +222,7 @@ individual<-  read.table("poblacion_individual_junta.txt", header = TRUE, sep = 
 
 # recibo tambien las tablas con los casos de epoc,dm,icc segun constan en los diagnosticos de primaria -asi podemos contrastar el denominador..: diabetes_ ; hta_; icc_ ; epoc_ap
 
-
+library(cohorteicc)
  
 ```
 
@@ -292,7 +292,7 @@ individual %>% filter(cupo %in% oferta$cupo) -> individual
 cat("Filas fichero individual:\n")
 nrow(individual) # 1890664
 cat("Filas fichero agregado:\n")
-nrow(oferta) # 1373
+nrow(oferta) # 1373    OJO AHORA SALE 1365, QUIZAS POR EL PORC_EPOC
 ```
 
 
@@ -309,12 +309,7 @@ oferta$op <- NULL #constante, 1
 
 ## Adjuntar datos de diagnosticos de AP 
 ```{r REPASAR datos_diagnosticosAP, include=TRUE}
-
-table(ind$dm, ind$dm_ap)
-  #         0       1
-  # 0 1744045    3863
-  # 1    8714  129207
-# curioso, tambien se dan casos con diagnostico en ap que no estan en acg!!!
+names(individual)
 
 # QUE DENOMINADORES PARA EL ANALISIS? DEBE SER COHERENTE CON LA OP..
 
@@ -345,6 +340,14 @@ cat("EPOC codificados en AP:\n")
 39554 / 50507 #un 78%
 
 rm(dm_ap, epoc_ap, hta_ap)
+
+
+table(individual$dm, individual$dm_ap)
+  #         0       1
+  # 0 1744045    3863
+  # 1    8714  129207
+# curioso, tambien se dan casos con diagnostico en ap que no estan en acg!!!
+
 
 ```
 
@@ -444,7 +447,7 @@ individual %>%
   group_by(cupo) %>% 
   summarise(n_cupo=n()) %>% right_join(oferta) -> oferta
 
-
+names(individual)
 
 
 # adjuntar porcentaje mayores 64
@@ -577,7 +580,7 @@ save.image("dfHPE.Rdata")
 
 
 
-```{r libraries ultinivel, include=FALSE}
+```{r libraries multinivel, include=FALSE}
 
 #rm(list=ls())
 library(sjstats)
@@ -595,11 +598,36 @@ library(coefplot)
 ### le agregamos a las bases la informacion
 # igual mejor terciles de medea que quintiles
 
-df
+rm(oferta)
 
+# adjuntar el outcome
+ind %>% 
+  group_by(cupo) %>% 
+  summarise(n_cupo=n(), 
+            hpe_dm = sum(hpe_dm),
+            hpe_icc = sum(hpe_icc),
+            hpe_epoc = sum(hpe_epoc),
+            hpe_tot = sum(hpe_tot)) %>% 
+  right_join(oferta_dat) -> oferta_dat
+
+
+
+# mod0 <- MASS::glm.nb(hpe_epoc ~ offset(log(n_cupo)), data = oferta_dat)
+# mod1 <- MASS::glm.nb(hpe_epoc ~ offset(log(n_cupo)), data = oferta_dat)
+
+# mod1 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + offset(log(n_cupo)), data = oferta_dat)
+# mod2 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + pmujer + offset(log(n_cupo)), data = oferta_dat)
+summary(mod0)
+
+
+rm(mod0, mod1, mod2)
+
+setwd("~/Documents/Proyectos/osakidetza/HPE/base")
 load("dfHPE.Rdata")
 
 ### los hpe son conteos.. esto quizas se aborda mejor con un zeroinflated poisson!!
+
+
 
 summary(iccdf)
 ICC("hpe_icc","osi",iccdf) #  0.001220938
@@ -620,6 +648,8 @@ return(data.frame(df))}
 
 ##########  logisticas
 
+??cute
+
 # 
 # dm2 <- cute(dmdf)
 # dm2$var2 <- ifelse(dm2$hpe_dm==0,0,1)
@@ -628,22 +658,37 @@ icc2$var2 <- ifelse(icc2$hpe_icc==0,0,1)
 
 # as.factor(quintil) igual mejor sacar terciles
 summary(icc2)
+table(as.numeric(icc2$ageg20))
 
+icc2<-filter(icc2,as.numeric(ageg20)>1)
 #### icc
-moic_v<-glmer(var2~(1|cupo),family=binomial, data=icc2)
-moic_0<-glmer(var2~ageg20+sexo+(1|cupo),family=binomial, data=icc2)
-moic_1<-glmer(var2~ageg20+sexo+dm+ (1|cupo),family=binomial, data=icc2)
-moic_2<-glmer(var2~ageg20+sexo+dm+ medea3_cat + (1|cupo),family=binomial, data=icc2)
+moic_vo<-glmer(var2~(1|osi) + (1|sscc),family=binomial, data=icc2)
+moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
+
+
+moic_0<-glmer(var2~ageg20+sexo+(1|cupo)+ (1|sscc),family=binomial, data=icc2)
+moic_1<-glmer(var2~sexo+dm+ (1|cupo)+ (1|sscc),family=binomial, data=icc2)
+moic_2<-glmer(var2~sexo+dm+ medea3_cat + (1|cupo)+ (1|sscc),family=binomial, data=icc2)
 moic_3<-glmer(var2~ageg20+sexo+dm+ medea3_cat + porc_hta6_cat + (1|cupo),family=binomial, data=icc2)
 moic_4<-glmer(var2~ageg20+sexo+dm+ medea3_cat*porc_hta6_cat + (1|cupo),family=binomial, data=icc2)
 
+summary(icc2)
+# me planteo meter como aleatorio la seccion censal o lo que sea la unidad de medea
+icc2$sscc <- as.factor(icc2$priv)
+length(levels(icc2$sscc)) # 1595 secciones!
+
+moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
+
+moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
+
+summary(moic_1)
 
 moic_2
 summary(moic_3)
 coefplot( moic_2)
 coefplot( moic_3)
 #shinyMer(moic_0)
-plotREsim(REsim(moic_v))
+plotREsim(REsim(moic_vo))
  
 sjstats::icc(moic_3)
 
@@ -673,6 +718,15 @@ coefplot( moep_3)
 coefplot( moep_4)
 #shinyMer(modm_0)
 
+exp(coef(modm_3))
+
+m <- modm_3
+se <- sqrt(diag(vcov(m)))
+# table of estimates with 95% CI
+(tab <- cbind(Est = fixef(m), LL = fixef(m) - 1.96 * se, UL = fixef(m) + 1.96 *
+    se))
+exp(tab)
+https://stats.idre.ucla.edu/r/dae/mixed-effects-logistic-regression/
 
 ## algo esta mal planteado en este fenomeno poisson, mirar lo del offset..
 
