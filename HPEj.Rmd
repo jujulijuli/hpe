@@ -579,6 +579,135 @@ save.image("dfHPE.Rdata")
 ```
 
 
+```{r funnel, message=FALSE, echo=FALSE}
+
+###############################################################################
+
+ 
+
+
+funnelc <- function(df,label) {
+names(df)[2:3]<- c("y","x")
+df$p <- (df$y/df$x)
+df$p <-ifelse(df$p==0 ,NA, df$p)
+df$p <-ifelse(df$p==1 ,NA, df$p)
+df <- na.omit(df)
+##########
+#TH: funnel plot code :
+####################
+df$p.se <- sqrt((df$p*(1-df$p)) / (df$x))
+##############
+## common effect (fixed effect model)
+p.fem <- weighted.mean(df$p, 1/df$p.se^2)
+
+## lower and upper limits for 95% and 99.9% CI, based on FEM estimator
+#TH: I'm going to alter the spacing of the samples used to generate
+#the curves
+number.seq <- seq(max(df$x)/100,max(df$x), length.out=dim(df)[1])
+number.ll95 <- p.fem - 1.96 * sqrt((p.fem*(1-p.fem)) / (number.seq))
+number.ul95 <- p.fem + 1.96 * sqrt((p.fem*(1-p.fem)) / (number.seq))
+dfCI <-data.frame(number.ll95, number.ul95, number.seq, p.fem)
+
+## draw plot
+#TH: note that we need to tweak the limits of the y-axis
+#pdf(paste(y,"funel.pdf",sep=""))
+#pdf("funnel.pdf")
+p <- ggplot(df,aes(x,p))
+pf <- p + geom_point()+
+      geom_line(aes(x = number.seq, y = number.ll95), data = dfCI)+
+geom_line(aes(x = number.seq, y = number.ul95), data = dfCI)+
+geom_hline(aes(yintercept = p.fem), data = dfCI) +
+scale_y_continuous(limits = c(0,max(df$p))) +
+xlab("nº pacientes") + ylab(paste(label,sep="_")) + theme_bw()
+#dev.off()
+       return(pf)
+}
+
+
+pp <- epoc2
+pp$pobla<-1
+
+df1 <- aggregate(cbind(var2,pobla)~osi, data=pp,sum)
+df2 <- aggregate(cbind(var2,pobla)~cupo, data=pp,sum)
+#par(mfrow=c(1,2))
+
+
+p1<-funnelc(df1,"prob h x epoc segun osi")
+p1
+
+p2<-funnelc(df2,"prob h x epoc segun cupo")
+p2
+ 
+library(Rmisc)
+multiplot(p1, p2, cols=2)
+
+
+names(pp)
+```
+
+```{r}
+  
+
+#################################################  out: death (sin efecto hospital)
+
+#################### sin efectos aleatorios
+names(pp)
+
+aglm<-glm(var2~age8+sexo+vacuna+dm+icc,family=binomial, data=pp)
+summary(aglm)
+coefplot(aglm)
+
+
+
+library(rms)
+
+
+levels(pp$age8) <- droplevels(pp$age8) 
+levels(pp$age8)
+names(pp) 
+   dd = datadist(pp)
+ options(datadist="dd")
+# 
+
+#  
+# aglm<-glm(death~edad+genero+cirabierta,family=binomial, data=pp)
+# summary(aglm)
+ 
+
+foi <-as.formula(var2~age8+sexo+dm+icc)
+foi <-as.formula(cirev~edad+genero+wcharlsum+tiping)
+# 
+# pp <-paste(names(cp2),"+",collapse="")
+# namex <-  substr(pp,1,nchar(pp)-1)
+# namex
+# foi <-as.formula(paste("IPE2 ~ ",namex))
+
+b<-lrm(foi , data =pp,x=T,y=T)
+b
+summary(b)
+lmod<-b
+plot(anova(lmod), what='proportion chisq') # relative importance
+plot(Predict(lmod)) # predicted values
+rms::validate(lmod, method="boot", B=500) # bootstrapped validation
+my.calib <- rms::calibrate(lmod, method="boot", B=500) # model calibration
+plot(my.calib, las=1)
+vif(lmod) # test for multicolinearity
+Predict(lmod)
+
+
+# 
+# ??makeFun
+# 
+# dprob <- mosaic::makeFun(aglm)
+# #head(dprob)
+# 
+# aglm<-glm(death~edad+genero+cirabierta+as.numeric(tiping),family=binomial, data=pp)
+# 
+# dprob <- makeFun(aglm)
+
+
+```
+
 
 ```{r libraries multinivel, include=FALSE}
 
@@ -593,7 +722,8 @@ library(coefplot)
 ```
 
 ```{r}
-
+https://stats.idre.ucla.edu/r/dae/mixed-effects-logistic-regression/
+https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html
 
 ### le agregamos a las bases la informacion
 # igual mejor terciles de medea que quintiles
@@ -641,56 +771,59 @@ ICC("hpe_epoc","cupo", epocdf) #  0.002512654
 
 summary(epocdf)
 
+summary(icc2$edad)
+# 
+
 cute <- function(df) {
-agebreaks <- seq(from=min(df$edad), to=max(df$edad), by=20)
-df$ageg20 <- cut2(df$edad, cuts=agebreaks) 
+agebreaks20 <- seq(from=min(df$edad), to=max(df$edad), by=20)
+df$ageg20 <- cut2(df$edad, cuts=agebreaks20) 
+ agebreaks <- c(50,60,70,75,80,85,90,110)
+ # agelabels <- c("30-49","50-59","60-69",
+ #                "70-74","75-79","80-84","85+")
+ df$age8 <- cut2(df$edad, cuts=agebreaks) 
 return(data.frame(df))}
 
 ##########  logisticas
 
-??cute
+??cut2
 
 # 
 # dm2 <- cute(dmdf)
 # dm2$var2 <- ifelse(dm2$hpe_dm==0,0,1)
 icc2<- cute(iccdf)
 icc2$var2 <- ifelse(icc2$hpe_icc==0,0,1)
-
-# as.factor(quintil) igual mejor sacar terciles
-summary(icc2)
-table(as.numeric(icc2$ageg20))
-
-icc2<-filter(icc2,as.numeric(ageg20)>1)
-#### icc
-moic_vo<-glmer(var2~(1|osi) + (1|sscc),family=binomial, data=icc2)
-moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
-
-
-moic_0<-glmer(var2~ageg20+sexo+(1|cupo)+ (1|sscc),family=binomial, data=icc2)
-moic_1<-glmer(var2~sexo+dm+ (1|cupo)+ (1|sscc),family=binomial, data=icc2)
-moic_2<-glmer(var2~sexo+dm+ medea3_cat + (1|cupo)+ (1|sscc),family=binomial, data=icc2)
-moic_3<-glmer(var2~ageg20+sexo+dm+ medea3_cat + porc_hta6_cat + (1|cupo),family=binomial, data=icc2)
-moic_4<-glmer(var2~ageg20+sexo+dm+ medea3_cat*porc_hta6_cat + (1|cupo),family=binomial, data=icc2)
-
-summary(icc2)
 # me planteo meter como aleatorio la seccion censal o lo que sea la unidad de medea
 icc2$sscc <- as.factor(icc2$priv)
 length(levels(icc2$sscc)) # 1595 secciones!
 
-moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
 
-moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
+# as.factor(quintil) igual mejor sacar terciles
+summary(icc2)
+table(icc2$age8)
+icc2 <- filter(icc2,as.numeric(age8)>2)
 
+#### icc
+moic_v<-glmer(var2~(1|cupo) + (1|sscc),family=binomial, data=icc2)
+moic_vo<-glmer(var2~(1|osi) + (1|sscc),family=binomial, data=icc2)
+
+
+moic_0<-glmer(var2~age8+sexo+(1|osi)+ (1|sscc),family=binomial, data=icc2)
+summary(moic_0)
+moic_1<-glmer(var2~age8+sexo+dm+ (1|osi)+ (1|sscc),family=binomial, data=icc2)
+# he eliminao (no convergia) los menores de 60
+# podia plantear la edad de ref 60-80
 summary(moic_1)
-
-moic_2
-summary(moic_3)
+coefplot( moic_1)
+moic_2<-glmer(var2~age8+sexo+dm+ medea3_cat + (1|osi)+ (1|sscc),family=binomial, data=icc2)
 coefplot( moic_2)
+moic_3<-glmer(var2~age8+sexo+dm+ porc_hta6_cat + (1|osi)+ (1|sscc),family=binomial, data=icc2)
 coefplot( moic_3)
+
+
 #shinyMer(moic_0)
-plotREsim(REsim(moic_vo))
+plotREsim(REsim(moic_3))
  
-sjstats::icc(moic_3)
+sjstats::icc(moic_0)
 
 
 
@@ -699,121 +832,89 @@ sjstats::icc(moic_3)
 epoc2<- cute(epocdf)
 epoc2$var2 <- ifelse(epoc2$hpe_epoc==0,0,1)
 summary(epoc2) # Mean   :0.04463  
+epoc2$sscc <- as.factor(epoc2$priv)
+length(levels(epoc2$sscc)) # 1611 secciones!
 
-moep_v<-glmer(var2~(1|cupo),family=binomial, data=epoc2)
+# partir del modelo individual.. y modelizar la edad y el sexo
+
+
+### igual la estrategia descansa en estos contrastes de los efectos aleatorios y su capacidad de contraste.. lo que no cuadra es tener osi y sscc.. mejor algo mas desagregado cupo-sscc.. y de cada una tenemos un indicador contextual-> buena practica/privacion..
+
+# por otro lado hay que meter un procedimiento de contraste-seleccion de modelo
+
+## para seleccionar la edad podemos usar algun criterio mirando la tabla de prevalencias
+
+
+moep_v<-glmer(var2~(1|cupo)+(1|sscc),family=binomial, data=epoc2)
+moep_v3<-glmer(var2~(1|cupo)+(1|osi)+(1|sscc),family=binomial, data=epoc2)
 plotREsim(REsim(moep_v))
 sjstats::icc(moep_v)
-
-moep_0<-glmer(var2~ageg20+sexo+(1|cupo),family=binomial, data=epoc2)
-moep_1<-glmer(var2~ageg20+sexo+dm+ (1|cupo),family=binomial, data=epoc2)
-moep_2<-glmer(var2~ageg20+sexo+dm+ medea3_cat + (1|cupo),family=binomial, data=epoc2)
-moep_3<-glmer(var2~ageg20+sexo+dm+ medea3_cat + porc_epoc4_cat + (1|cupo),family=binomial, data=epoc2)
-moep_4<-glmer(var2~ageg20+sexo+dm+ medea3_cat*porc_epoc4_cat + (1|cupo),family=binomial, data=epoc2)
+plotREsim(REsim(moep_v3))
+sjstats::icc(moep_v3)
 
 
-moep_2
-summary(moep_4)
+epoc2 <- filter(epoc2,as.numeric(age8)>2)
+
+
+moep_0<-glmer(var2~age8+sexo+(1|cupo)+(1|sscc),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,
+ data=epoc2)
+
+
+coefplot(moep_0)
+sjstats::icc(moep_0)
+plotREsim(REsim(moep_0))
+
+moep_1<-glmer(var2~age8+sexo+dm+ icc+ (1|cupo)+(1|sscc),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,data=epoc2)
+summary(moep_1)
+coefplot( moep_1)
+sjstats::icc(moep_1)
+plotREsim(REsim(moep_1))
+
+
+moep_2<-glmer(var2~age8+sexo+dm+icc+ medea3_cat + (1|cupo)+(1|sscc),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epoc2)
+summary(moep_2)
 coefplot( moep_2)
+sjstats::icc(moep_2)
+plotREsim(REsim(moep_2))
+
+
+
+moep_3<-glmer(var2~age8+sexo+dm+ icc+  porc_epoc4_cat + (1|cupo)+(1|sscc),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epoc2)
+
+
+summary(moep_3)
 coefplot( moep_3)
-coefplot( moep_4)
+sjstats::icc(moep_3)
+plotREsim(REsim(moep_3))
+
+
+# moep_4<-glmer(var2~ageg20+sexo+dm+ medea3_cat*porc_epoc4_cat + (1|cupo),family=binomial, data=epoc2)
+# summary(moep_4)
+# coefplot( moep_4)
+
 #shinyMer(modm_0)
 
-exp(coef(modm_3))
-
-m <- modm_3
-se <- sqrt(diag(vcov(m)))
-# table of estimates with 95% CI
-(tab <- cbind(Est = fixef(m), LL = fixef(m) - 1.96 * se, UL = fixef(m) + 1.96 *
-    se))
-exp(tab)
-https://stats.idre.ucla.edu/r/dae/mixed-effects-logistic-regression/
-
-## algo esta mal planteado en este fenomeno poisson, mirar lo del offset..
-
-### mirar lo de reescalar!!! 
-######### igual lo mejor es clasificar (pienso en el descriptivo) los cupos en terciles de deprivacion y de proceso, cruzarlos como en una interacci'on y mostrar en ese grid de 9 la distribucion del riesgo de ingreso..!
-
-
-
-
-require(pscl)
-require(boot)
-#library(glmmADMB)
-#vt4$grupo<-relevel( dat$grupo, ref="estandar")
-
-
-summary(m1 <- zeroinfl(hpe_dm ~ ageg20+sexo+ 1|osi, data = dm2))
-
-
-https://stats.idre.ucla.edu/r/dae/zip/
-  
-  # All of the predictors in both the count and inflation portions of the model are statistically significant. This model fits the data significantly better than the null model, i.e., the intercept-only model. To show that this is the case, we can compare with the current model to a null model without predictors using chi-squared test on the difference of log likelihoods.
-
-mnull <- update(m1, . ~ 1)
-pchisq(2 * (logLik(m1) - logLik(mnull)), df =15, lower.tail = FALSE)
-
-# Since we have three predictor variables in the full model, the degrees of freedom for the chi-squared test is 15. This yields a high significant p-value; thus, our overall model is statistically significant.
-# 
-# Note that the model output above does not indicate in any way if our zero-inflated model is an improvement over a standard Poisson regression. We can determine this by running the corresponding standard Poisson model and then performing a Vuong test of the two models.
-
-summary(p1 <- glm(hpe_dm ~ ageg20+sexo, family = poisson, data = dm2))
-
-vuong(p1, m1)
-
-
-# The Vuong test compares the zero-inflated model with an ordinary Poisson regression model. In this example, we can see that our test statistic is significant (depending of...!), indicating that the zero-inflated model is superior to the standard Poisson model.
-
-# We can get confidence intervals for the parameters and the exponentiated parameters using bootstrapping. For the Poisson model, these would be incident risk ratios, for the zero inflation model, odds ratios. We use the boot package. First, we get the coefficients from our original model to use as start values for the model to speed up the time it takes to estimate. Then we write a short function that takes data and indices as input and returns the parameters we are interested in. Finally, we pass that to the boot function and do 1200 replicates, using snow to distribute across four cores. Note that you should adjust the number of cores to whatever your machine has. Also, for final results, one may wish to increase the number of replications to help ensure stable results.
-
-dput(coef(m1, "count"))
-dput(coef(m1, "zero"))
-
-
-f <- function(data, i) {
-  require(pscl)
-  m <- zeroinfl(hpe_dm ~ ageg20+sexo+ 1|osi, data = dm2[i, ],
-    start = list(hpe_dm = c(-0.92, -1.18, -2.60, -1.81, -1.505, -0.45), zero = c(3.57, -0.22, -0.56, -0.21, 14.529, 0.71, -0.03, 0.96, -0.078, 0.25, 0.19)))
-  as.vector(t(do.call(rbind, coef(summary(m)))[, 1:2]))
-}
-
-set.seed(10)
-res <- boot(dm2, f, R = 1200, parallel = "snow", ncpus = 4)  # 16?
-
-## print results
-res
-
-
-The results are alternating parameter estimates and standard errors. That is, the first row has the first parameter estimate from our model. The second has the standard error for the first parameter. The third column contains the bootstrapped standard errors, which are considerably larger than those estimated by zeroinfl.
-
-Now we can get the confidence intervals for all the parameters. We start on the original scale with percentile and bias adjusted CIs. We also compare these results with the regular confidence intervals based on the standard errors.
-
-## basic parameter estimates with percentile and bias adjusted CIs
-parms <- t(sapply(c(1, 3, 5, 7, 9), function(i) {
-  out <- boot.ci(res, index = c(i, i + 1), type = c("perc", "bca"))
-  with(out, c(Est = t0, pLL = percent[4], pUL = percent[5],
-     bcaLL = bca[4], bcaLL = bca[5]))
-}))
-
-## add row names
-row.names(parms) <- names(coef(m1))
-## print results
-parms
 
 ## compare with normal based approximation
-confint(m1)
+#confint(m1)
 ##########
 
 
- almer<-glmer(death~edads+genero+wchars+cirev+tiping+(1|chos),family=binomial, data=pp3)
- almery<-glmer(death~edads+genero+wchars+cirev+tiping+ yn+ (1|chos),family=binomial, data=pp3)
+ 
+ 
+ anova(moep_0,moep_1)
+ anova(moep_1,moep_2)
+ anova(moep_1,moep_3)
+
  
  
  
+save.image("dfHPE.Rdata")
  
- anova(almer,almery)
- library(coefplot)
- coefplot(almer,almerv)
- 
+# 
+# 
+#  coefplot(almer,almerv)
+#  
   
 oric<-function(mod){
  se <- sqrt(diag(vcov(mod)))
@@ -821,34 +922,69 @@ oric<-function(mod){
  (exp(tab <- cbind(Est = fixef(mod), LL = fixef(mod) - 1.96 * se, UL = fixef(mod) + 1.96 * se)))
 }
 
-round(oric(almery),2)
+round(oric(moep_2),2)
 
-exp(tab)
-
-
-
- predictions <- predict(almer, type = "response")
+ predictions1 <- predict(moep_1, type = "response")
+ predictions2 <- predict(moep_2, type = "response")
 
   
+library(PredictABEL)
+ plotROC(na.omit(epoc2), 20,  predictions1)
+  plotROC(na.omit(epoc2), 20,  predictions2)
+ 
+################################
+```
 
- plotROC(na.omit(pp2), 1,  predictions)
- names(pp2)
- 
- 
- shinyMer(almer)
- 
- plotREsim(REsim(almer))
- 
- summary(almer)
-m<-almer
-se <- sqrt(diag(vcov(m)))
-# table of estimates with 95% CI
-tab <- cbind(Est = fixef(m), LL = fixef(m) - 1.96 * se, UL = fixef(m) + 1.96 *  se)
-dimnames(tab)[[1]]<-c("(Intercept)", "edad"  , "hombre" , "i.charlson" ,  "cgi. abierta" , "urgente" )
-xtable(exp(tab), caption = "Odds ratio de mortalidad", digits=c(0,2,2,2))
-## odds ratio
-#qqmath(ranef(m, postVar = TRUE), strip = FALSE)$chos
-# 
+
+```{r vpc, message=FALSE, echo=FALSE}
+################################################################################
+############################### fraccion varianza explicada x hospital (VPC)
+#####################################################################################
+VarCorr(moep_2)[2]
+
+x <- moep_2
+n <- 1
+label <- "cupo"
+paste("% varianza atribuible al efecto ",label)
+
+run.vpc.glm <- function(x,n,label) {
+m <- round(as.double(VarCorr(x))[n]/(sum(as.double(VarCorr(x))) + pi^2/3),4)*100
+cat(paste("% varianza atribuible al efecto ",label), "\n",  "media = ",m, "\n")
+}
+
+run.vpc.glm(moep_2,1,"sscc") 
+# % varianza atribuible al efecto  sscc 
+#  media =  1.31 
+run.vpc.glm(moep_2,2,"cupo") 
+# % varianza atribuible al efecto  cupo 
+#  media =  2.89 
+
+
+```
+
+
+```{r MOR-IOR, message=FALSE, echo=FALSE}
+###
+################################### MOR/ IOR (aqui no se usa)
+################################## Median/Interval Odds Ratio
+########################################################################################################
+#
+#https://stat.ethz.ch/pipermail/r-sig-mixed-models/2008q2/000874.html
+
+
+MOR.glm <- function(model, digits = 2)
+          { # MOR arguments: my.model = glme model; extracting variance associated with level 2
+            # clustering variable
+            # digits = number of decimal places to which MOR value
+            # will be rounded.
+            my.var <- as.double(VarCorr(model))
+            Median.OR <- round(exp(sqrt(2*my.var)*qnorm(.75)), digits)
+            paste("Median Odds-Ratio (MOR) = ", Median.OR)  }
+
+MOR.glm(moep_2)
+
+#  "Median Odds-Ratio (MOR) =  1.22" "Median Odds-Ratio (MOR) =  1.35"
+
 ```
 
 
