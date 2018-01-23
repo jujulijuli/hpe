@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Lectura de datos ------
 #setwd("D:/perfiles/72480965F/Mis Documentos/Proyectos/Esteve/201711")
 
-rm(list=ls())
+#rm(list=ls())
 
 
 # Paquetes
@@ -28,11 +28,15 @@ library(lme4)
 library(merTools)
 #library(rms)
 library(coefplot)
+library(coefplot2)
 
 library(berryFunctions)  # funnel
 library(PredictABEL) # plotROC
 
 library(ggplot2)
+
+
+library(readxl)
 
 ```
 
@@ -228,14 +232,14 @@ oferta$icc_5cathta<-quantcut(oferta$porc_hta6, q=5, na.rm=TRUE)
 oferta$epoc_5catab<-quantcut(oferta$porc_epoc4, q=5, na.rm=TRUE)
 
 
-# adjuntar la deprivacion... hay que llevarlo luego de vuelta a individuo, esto ines seguro que puedes hacerlo dentro del mismo pipe, yo lo hare mas adelante (linea 359)
+# adjuntar la deprivacion...
 individual %>% 
   group_by(cupo) %>% 
   summarise(priv = mean(priv)) %>% 
   right_join(oferta) -> oferta
 
 oferta$priv_5cat<-quantcut(oferta$priv, q=5, na.rm=TRUE)  # quintiles de privacion con unidad el cupo
-
+## ESTE PASO ES IMPORTANTE DOCUMENTARLO, EN LA BASE INDIVIDUAL CADA SUJETO TENIA UNA PRIV QUE CORRESPONDIA A SU BARRIO, PERO SE DECIDIO QUE LA UNICA UNIDAD ECOLOGICA SEA EL CUPO, DE MODO QUE SE HA CREADO UN INDICE POR CUPO QUE, o bien se proyecta individualemente sobre los individuos (ines, igual en un solo paso sin join...) o lo que se proyecta sobre los individuos son los quintiles ya calculados desde la tabla oferta.. esto ultimo es lo que hice pero dado que no estan del todo balanceados el resultado no es el mismo.. PENSARLO!
 
 # adjuntar el outcome y tamaño cupo >59a
 individual %>% 
@@ -286,7 +290,13 @@ return(data.frame(df))}
 
 ### DESCUBRO  QUE EL DM...ACG .. NO SIEMPRE INGLUYE EL DE AP!! -HABRA QUE REPASAR TODO LO ANTERIRO -CRITERIOS DE FILTRO..ETC
 
-ind <- dplyr::select(individual,id_paciente,osi,cupo,uap,com,edad,sexo, acg,priv, epoc,dm,hta,icc,vacuna,vacunaepoc,insu,ado,ieca,dm_ap,hta_ap,epoc_ap,  hpe_icc, hpe_epoc,numfarmac, insu, ado, ieca)  # podria meter en una misma variable si el diagnostico esta en ap o solo en otra fuente
+#   PARCHE PARA PODER INCORPORAR ACG SIN VOLVER AL PPIO
+# indo<-inner_join(individual,dplyr::select(ind,id_paciente))
+# indo<-inner_join(indo,dplyr::select(ind,id_paciente,osi,dm_ap,hta_ap,epoc_ap))
+
+ind <- dplyr::select(indo,id_paciente, acg,osi,cupo,uap,com,edad,sexo, acg,priv, epoc,dm,hta,icc,vacuna,vacunaepoc,insu,ado,ieca,dm_ap,hta_ap,epoc_ap,  hpe_icc, hpe_epoc,numfarmac, insu, ado, ieca)  # podria meter en una misma variable si el diagnostico esta en ap o solo en otra fuente
+
+#rm(individual,indo)
 
 ind<- cute(ind)  # edad en 6 grupos [ 60, 65) [ 65, 70) [ 70, 75) [ 75, 80) [ 80, 85) [ 85,110] 
 
@@ -302,19 +312,47 @@ ind$hpe2epoc <- ifelse(ind$hpe_epoc==0,0,1)
 ind$umedea <- as.factor(ind$priv)
 length(levels(ind$umedea)) # 1643 secciones/ unidades medea
 
+# PARA LOS QUINTILES DE PRIVACION LA UNIDAD ES EL CUPO NO EL INDIVIDUO.., ELIMINO LA INDIVIDUAL..
 ind$privori <- ind$priv
-ind <- inner_join(dplyr::select(ind,-c(priv,medea5_cat)),dplyr::select(oferta,cupo, priv, priv_5cat, icc_5cathta, porc_hta6, epoc_5catab, porc_epoc4))
+# ind <- inner_join(dplyr::select(ind,-c(priv,medea5_cat)),dplyr::select(oferta,cupo, priv, priv_5cat, icc_5cathta, porc_hta6, epoc_5catab, porc_epoc4))
+
+ind <- inner_join(dplyr::select(ind,-c(priv)),dplyr::select(oferta,cupo, priv, priv_5cat, icc_5cathta, porc_hta6, epoc_5catab, porc_epoc4))
+
+## le añadimos los pesos acg
+names(ind)
+
+setwd("~/Documents/Proyectos/osakidetza/HPE/base")
+peso2013 <- read_excel("peso2013.xlsx")
+ind <- left_join(ind,dplyr::select(peso2013,acg,pesosobremedia))
 
 
+ind$pacg_3cat<-quantcut(ind$pesosobremedia, q=3, na.rm=TRUE)
+table(ind$pacg_3cat) # [0.117,1.33]  (1.33,3.05]  (3.05,20.6] 
+
+
+# Hola Juli: lo que viene en el Excel:
+# -Basado en datos de la estratificación 2012-2013
+#  
+# Personas: nº de personas en cada ACG
+# Coste predicho: coste que se espera generen las personas en cada categoría ACG
+# Peso: coste predicho/personas
+# Peso sobre media: coste predicho/personas entre coste predicho total/personas total (más de 1: por encima de la media esperada. Menos de 1 por debajo)
+#  
+# Yo usaría la variable pesosobremedia (aunque creo que peso daría lo mismo)
+#  
+# Yo creo que introduciría la variable como categórica (dividirlo en quintiles).
+#  
+# NOTA: Según el sistema ACG cada individuo sólo puede pertenecer a una categoría ACG. Puede que en una misma categoría esté un diabético y un acv, pero en cuanto al tipo de morbilidad se supone que es similar si comparten un mismo ACG, y además se espera que consuman parecidos recursos.
+ 
 
 ### Y TENDREMOS 2 BASES DE ANALISIS con denominadores especificos  ####### 
 
 iccdf<- ind %>% filter((icc==1)  & (hta==1 | hta_ap==1))%>% # selecciono los tienen hta en cualquier fuente, pero guardo diagnosticados en ap (?%)
- dplyr::select(id_paciente,osi, cupo, age6, edad, sexo, priv, priv_5cat, acg,dm, dm_ap, epoc, epoc_ap, ieca,  hta_ap, hpe2icc, umedea,icc_5cathta, porc_hta6 )
+ dplyr::select(id_paciente,osi, cupo, age6, edad, sexo, priv, priv_5cat, acg,dm, dm_ap, epoc, epoc_ap, ieca,  hta_ap, hpe2icc, umedea,icc_5cathta, porc_hta6, pacg_3cat )
   ## echar un ojo a su denominador pob_
 
 epocdf<- ind %>% filter(epoc==1 | epoc_ap==1) %>% # selecciono los tienen diagnosticados en alguna fuente (op-espirometria??)
- dplyr::select(id_paciente, osi, cupo,age6, edad, sexo,priv, priv_5cat, acg, dm,  dm_ap, icc,  vacuna,vacunaepoc, epoc, epoc_ap, hpe2epoc, umedea, epoc_5catab, porc_epoc4)
+ dplyr::select(id_paciente, osi, cupo,age6, edad, sexo,priv, priv_5cat, acg, dm,  dm_ap, icc,  vacuna,vacunaepoc, epoc, epoc_ap, hpe2epoc, umedea, epoc_5catab, porc_epoc4, pacg_3cat)
  
 ## hay que pegar la oferta$epoc4.. y echar un ojo a su denominador (el 5, vacunas lo trabajamos individual y agregado!)
 
@@ -322,63 +360,15 @@ epocdf<- ind %>% filter(epoc==1 | epoc_ap==1) %>% # selecciono los tienen diagno
 
 
 setwd("~/Documents/Proyectos/osakidetza/HPE/base")
-save.image("datanalisis.Rdata")
+save(ind,epocdf,iccdf,file="datanalisis.Rdata")
 
 
-
-
-```
-
-
-```{r funnel, message=FALSE, echo=FALSE}
-
-https://www.rdocumentation.org/packages/berryFunctions/versions/1.16.3/topics/funnelPlot
-
-############################################################################### Funnel plots for proportional data with confidence interval based on sample size. Introduced by Stephen Few, 2013
-
-
-pp <- epocdf
-pp <- iccdf
-pp$pobla<-1
-
-## cambiar var2 por hpe2icc o hpe2epoc segun corresponda
-
-df1 <- aggregate(cbind(var2,pobla)~osi, data=pp,sum)
-df2 <- aggregate(cbind(var2,pobla)~cupo, data=pp,sum)
-#par(mfrow=c(1,2))
-
-
-p1<-funnelc(df1,"prob h x epoc segun osi")
-p1<-funnelc(df1,"prob h x icc segun osi")
-p1
-
-p2<-funnelc(df2,"prob h x epoc segun cupo")
-p2<-funnelc(df2,"prob h x icc segun cupo")
-p2
-
-
-# 
-# funnelPlot(x,y, main="EPOC, riesgo de ingreso hospitalario segun cupo", xlab="tamaño del cupo (pacientes con epoc)", ylab="prob-año de ingreso por descompensacion")
 
 
 
 ```
 
 
-## a hacer ::: 
-* se plantea al final un analisis con todos- en el que se introduzca el esta o no diagnosticado x atencion primaria como covariable..
-
-* pensar las otras varaibles inviduales: farmacos, vacunas...
-
-* Modelo Poisson sencillo
-```{r INES modelos_pruebas, not includet, eval=FALSE}
-
-mod0 <- MASS::glm.nb(hpe_epoc ~ offset(log(n_cupo)), data = oferta_dat)
-mod1 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + offset(log(n_cupo)), data = oferta_dat)
-mod2 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + pmujer + offset(log(n_cupo)), data = oferta_dat)
-
-rm(mod0, mod1, mod2)
-```
 
 
      
@@ -413,22 +403,37 @@ ggplot(aes(x = porc_hta6, y=phpe_icc), data = oferta) +   geom_point(aes(size =n
 ```{r sin efectos aleatorios glm, variables individuales  ___ en bases especificas y global}
 
 
+setwd("~/Documents/Proyectos/osakidetza/HPE/base")
+load("datanalisis.Rdata")
+
+
 #################################################  
 
 #################### sin efectos aleatorios bases especificas (estoy usando dm de acg!!)
+ moep_0ef <-  glm(hpe2epoc~age6+sexo+dm+icc +  pacg_3cat,family=binomial, data=epocdf)
 
-coefplot(glm(hpe2epoc~age6+sexo+dm+icc,family=binomial, data=epocdf),intercept=FALSE)   ## vacuna aumenta el riesgo de ingreso, la quito
 
-coefplot(glm(hpe2icc~age6+sexo+dm,family=binomial, data=iccdf),intercept=FALSE)  ## epoc protege, parece deberse a la propia dedinicion de hosp x icc evitable (COMPROBAR), la quito, los iecas salen no significativos pero tb tienden a incrementar, lo quito
+coefplot(glm(hpe2epoc~age6+sexo+dm+icc +  pacg_3cat,family=binomial, data=epocdf),intercept=FALSE)   ## vacuna aumenta el riesgo de ingreso, la quito
+
+moic_0ef <- glm(hpe2icc~age6+sexo+dm +  pacg_3cat,family=binomial, data=iccdf)
+
+coefplot(glm(hpe2icc~age6+sexo+dm +  pacg_3cat,family=binomial, data=iccdf),intercept=FALSE)  ## epoc protege, parece deberse a la propia dedinicion de hosp x icc evitable (COMPROBAR), la quito, los iecas salen no significativos pero tb tienden a incrementar, lo quito
 
 #################### sin efectos aleatorios bases general.. aqui el denominador es todo el cupo
 
-coefplot(glm(hpe2epoc~age6+sexo+dm+icc+epoc_ap,family=binomial, data=ind),intercept=FALSE)   ## vacuna aumenta el riesgo de ingreso, la quito
+ moep_0id <- glm(hpe2epoc~age6+sexo+dm+icc+epoc+  pacg_3cat,family=binomial, data=ind)
+
+coefplot(glm(hpe2epoc~age6+sexo+dm+icc+epoc+  pacg_3cat,family=binomial, data=ind),intercept=FALSE)   ## vacuna aumenta el riesgo de ingreso, la quito
 
 # como era de esperar el RR ligado a estar etiquetado en AP es enorme en relacion al resto de las variables,
 
-coefplot(glm(hpe2icc~age6+sexo+dm+icc+hta_ap,family=binomial, data=ind),intercept=FALSE)
+ moic_0id <- glm(hpe2icc~age6+sexo+dm+icc+hta_ap+  pacg_3cat,family=binomial, data=ind)
+
+coefplot(glm(hpe2icc~age6+sexo+dm+icc+hta_ap+  pacg_3cat,family=binomial, data=ind),intercept=FALSE)
 # que gran diferencia!!, fijaros en el cambio del efecto edad!!, la poblacion de hta-icc ha de ser muy poco representativa de toda la que tiene icc
+
+
+
 
 ```
 
@@ -446,39 +451,36 @@ https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01
 
 https://rstudio-pubs-static.s3.amazonaws.com/33653_57fc7b8e5d484c909b615d8633c01d51.html
 
-table(ind$hpe2icc)
+
 
 # desm <- function(mod) {
 # print(plotREsim(REsim(mod)))
 #   sjstats::icc(mod)
 # }
 
-plotREsim(REsim(moic_vef))
+
 
 ###################                      icc   
 moic_vid<-glmer(hpe2icc~(1|cupo) + (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), data=ind) ## modelo vacio con todos (id)
-
-desm(moic_vid)
 moic_vef<-glmer(hpe2icc~(1|cupo) + (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), data=iccdf) #             con enfer (ef)
 
 # 
-# 1  ~age6+sexo+dm+[icc + hta_ap]
- moic_1id<-glmer(hpe2icc~age6+sexo+dm+ icc + hta_ap+  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
- moic_1ef<-glmer(hpe2icc~age6+sexo+dm+  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=iccdf)
+# 1  ~age6+sexo+dm+  pacg_3cat[icc + hta_ap]
+ moic_1id<-glmer(hpe2icc~age6+sexo+dm+ icc + hta_ap+  pacg_3cat+  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
+ moic_1ef<-glmer(hpe2icc~age6+sexo+dm+  pacg_3cat+  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=iccdf)
 
   
-# 2  ~age6+sexo+dm+[icc + hta_ap] 
-moic_2id<-glmer(hpe2icc~age6+sexo+dm+ icc + hta_ap+ priv_5cat +  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
-moic_2ef<-glmer(hpe2icc~age6+sexo+dm+ priv_5cat +  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=iccdf)
+# 2  ~age6+sexo+dm+  pacg_3cat[icc + hta_ap] 
+moic_2id<-glmer(hpe2icc~age6+sexo+dm+ icc + hta_ap+  pacg_3cat+ priv_5cat +  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
+moic_2ef<-glmer(hpe2icc~age6+sexo+dm+  pacg_3cat+ priv_5cat +  (1|cupo)+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=iccdf)
 
 
-# 3 ~age6+sexo+dm+ + [icc + hta_ap]+ icc_5cathta+ priv_5cat
-moic_3id<-glmer(hpe2icc~age6+sexo+dm+  icc + hta_ap+ icc_5cathta+ priv_5cat + (1|cupo)+ (1|osi),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,  data=ind)
+# 3 ~age6+sexo+dm+  pacg_3cat [icc + hta_ap]+ icc_5cathta+ priv_5cat
+moic_3id<-glmer(hpe2icc~age6+sexo+dm+  icc + hta_ap+  pacg_3cat+ icc_5cathta+ priv_5cat + (1|cupo)+ (1|osi),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,  data=ind)
+moic_3ef<-glmer(hpe2icc~age6+sexo+dm+  pacg_3cat+  icc_5cathta+ priv_5cat + (1|cupo)+ (1|osi),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,  data=iccdf)
 
-moic_3ef<-glmer(hpe2icc~age6+sexo+dm+  icc_5cathta+ priv_5cat + (1|cupo)+ (1|osi),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,  data=iccdf)
 
 
-coefplot( moic_3id, intercept = FALSE)
 ######################            epoc
 
 # vacio
@@ -486,45 +488,78 @@ moep_vid<-glmer(hpe2epoc~(1|cupo)+(1|osi),family=binomial,control = glmerControl
 moep_vef<-glmer(hpe2epoc~(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), data=epocdf)
 
 # 1
-moep_1id<-glmer(hpe2epoc~age6+sexo+dm+ icc+ epoc +(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
-moep_1ef<-glmer(hpe2epoc~age6+sexo+dm+ icc+(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
+moep_1id<-glmer(hpe2epoc~age6+sexo+dm+ icc+ epoc+  pacg_3cat +(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
+moep_1ef<-glmer(hpe2epoc~age6+sexo+dm+ icc+  pacg_3cat+(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
 
 
 # 2
-moep_2id<-glmer(hpe2epoc~age6+sexo+dm+ icc+ epoc + priv_5cat+ (1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
-moep_2ef<-glmer(hpe2epoc~age6+sexo+dm+ icc+ priv_5cat+(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
+moep_2id<-glmer(hpe2epoc~age6+sexo+dm+ icc+ epoc+  pacg_3cat + priv_5cat+ (1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
+moep_2ef<-glmer(hpe2epoc~age6+sexo+dm+ icc+  pacg_3cat+ priv_5cat+(1|cupo)+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
 
 
 
 # 3
-moep_3id<-glmer(hpe2epoc~age6+sexo+dm+ icc+ epoc + priv_5cat+ epoc_5catab + (1|cupo) +(1|osi) ,family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
-moep_3ef<-glmer(hpe2epoc~age6+sexo+dm+ icc+ priv_5cat+ epoc_5catab+ (1|cupo)+ (1|osi) ,family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
+moep_3id<-glmer(hpe2epoc~age6+sexo+dm+ icc+ epoc+  pacg_3cat + priv_5cat+ epoc_5catab + (1|cupo) +(1|osi) ,family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=ind)
+moep_3ef<-glmer(hpe2epoc~age6+sexo+dm+ icc+  pacg_3cat+ priv_5cat+ epoc_5catab+ (1|cupo)+ (1|osi) ,family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
 
 
 
 
-coefplot(moep_0)
+########## modelo solo con OSI para contrastar AUC (sólo en enferemos)
 
 
-sjstats::icc(moep_0)
-plotREsim(REsim(moep_0))
+###################                      icc   
 
-moep_1<-glmer(var2~age6+sexo+dm+ icc+ (1|cupo)+(1|osi),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,data=epoc2)
-summary(moep_1)
-coefplot( moep_1)
-sjstats::icc(moep_1)
-plotREsim(REsim(moep_1))
+moic_vefo<-glmer(hpe2icc~(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), data=iccdf) # vacio con enfer (ef)
+
+# 
+# 1  ~age6+sexo+dm+  pacg_3cat[icc + hta_ap]
+
+ moic_1efo<-glmer(hpe2icc~age6+sexo+dm+  pacg_3cat+ (1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=iccdf)
+
+  
+# 2  ~age6+sexo+dm+  pacg_3cat[icc + hta_ap] 
+
+moic_2efo<-glmer(hpe2icc~age6+sexo+dm+pacg_3cat+ priv_5cat +  (1|osi) ,family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=iccdf)
+
+
+# 3 ~age6+sexo+dm+  pacg_3cat [icc + hta_ap]+ icc_5cathta+ priv_5cat
+
+
+moic_3efo<-glmer(hpe2icc~age6+sexo+dm+ pacg_3cat+ icc_5cathta+ priv_5cat + (1|osi),family=binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 1,  data=iccdf)
 
 
 
+######################            epoc
 
+# vacio
+moep_vefo<-glmer(hpe2epoc~(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), data=epocdf)
+
+# 1
+moep_1efo<-glmer(hpe2epoc~age6+sexo+dm+pacg_3cat+ icc+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
+
+# 2
+moep_2efo<-glmer(hpe2epoc~age6+sexo+dm+ icc+pacg_3cat+ priv_5cat+(1|osi),family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
+
+# 3
+moep_3efo<-glmer(hpe2epoc~age6+sexo+dm+ icc+pacg_3cat+ priv_5cat+ epoc_5catab+  (1|osi) ,family=binomial,control = glmerControl(optimizer = "bobyqa"), nAGQ = 1, data=epocdf)
+
+ 
 ###### guarda los modelos
 setwd("~/Documents/Proyectos/osakidetza/HPE/base")
 
-save(moic_vid, moic_vef, moic_1ef, moic_1id,moic_2ef, moic_2id,moic_3ef, moic_3id,moep_1ef, moep_vid, moep_vef, moep_1id,moep_2ef, moep_2id, moep_3ef, moep_3id, file = "modelos.RData")
+save( moic_vef,moic_vefo, moic_0ef, moic_1ef, moic_1efo, moic_2ef, moic_2efo, moic_3ef, moic_3efo, moep_vef, moep_vefo, moep_0ef,   moep_1ef, moep_1efo, moep_2ef, moep_2efo, moep_3ef, moep_3efo,  file = "modelosef.RData")
+
+
+save(moic_vid, moic_0id, moic_1id, moic_2id,moic_3id,moep_vid, moep_0id,  moep_1id, moep_2id, moep_3id, file = "modelosid.RData")
 
 
 
+```
+
+
+
+```{r graficos multinivel, coefplot2, contrate de modelos}
 
 #shinyMer(moic_0)
 plotREsim(REsim(moic_3ef))
@@ -533,14 +568,20 @@ plotREsim(REsim(moic_3id))
 sjstats::icc(moep_3ef)
 sjstats::icc(moep_3id)
 
+###  coefplot2(list("modelo individual","modelo con efecto aleatorio"[de enf/de ind])
 
-
-summary(moep_23)
-coefplot( moep_23, intercept = FALSE, title="Coeficientes del modelo GMLL -logit- (cupo/sscc) EPOC, >60a")
+summary(moep_3ef)
+coefplot( moep_3ef, intercept = FALSE, title="Coeficientes del modelo GMLL -logit- (cupo/sscc) EPOC, >60a")
 sjstats::icc(moep_23)
 plotREsim(REsim(moep_23))
 
-?coefplot
+
+
+
+# una opcion mas facil de transmitir -que las particiones de varianza.. o MOR- es el cambio en la capacidad discriminativa cuando pasamos de usar solo el efecto aleatorio de osi al que incluye tb el cupo...
+# incluyamos los cuatro analisis 
+
+
 
 # moep_4<-glmer(var2~ageg20+sexo+dm+ priv_5cat*porc_epoc4_cat + (1|cupo),family=binomial, data=epoc2)
 # summary(moep_4)
@@ -555,26 +596,45 @@ plotREsim(REsim(moep_23))
 
 
  ##############################   contraste de modelos
+ ## epoc
+### enfermos
+ anova(moep_vef,moep_1ef) # < 2.2e-16 ***
+ anova(moep_1efo,moep_1ef) # 0.005379 **
+ anova(moep_1ef,moep_2ef) # 0.003712 **
+ anova(moep_2ef,moep_3ef) # 0.0272 *
  
- anova(moep_0,moep_1)
- anova(moep_1,moep_2)
- anova(moep_1,moep_3)
- anova(moep_3,moep_23)
+ ## todos
+ anova(moep_vid,moep_1id) #  < 2.2e-16 ***
+ anova(moep_1id,moep_2id) #  0.000358 ***
+ anova(moep_2id,moep_3id) #  0.02397 *
  
- 
- 
-save.image("dfHPE.Rdata")
- 
+  ## icc
+### enfermos
+ anova(moic_vef,moic_1ef) # 6.912e-13 ***
 
+ anova(moic_1efo,moic_1ef) # 0.1845
+ anova(moic_1ef,moic_2ef)
+ anova(moic_1efo,moic_3ef)
+ 
+ ## todos
+ anova(moic_vid,moic_1id)
+ anova(moic_1id,moic_2id)
+ anova(moic_2id,moic_3id)
+ 
+ coefplot2(list(moep_0ef,moep_1efo,moep_1ef,moep_2ef,moep_3ef))
+ coefplot2(list(moic_0ef,moic_1efo,moic_1ef,moic_2ef,moic_3ef))  ## al meter los acg ha cambiado todo!! en icc
+ # ahora la edad -ni siquiera las ultimas categorias- aportan, y practicamente tampoco la privacion
+
+   coefplot2(list(moic_0id,moic_1id,moic_2id,moic_3id))  
+   coefplot2(list(moep_0id,moep_1id,moep_2id,moep_3id))  
+```
 
 
 ##############################  capacidad discriminativa: estadistico C-ROC
 
 
+```{r ROC}
 
-# 
-#  coefplot(almer,almerv)
-#  
   
 oric<-function(mod){
  se <- sqrt(diag(vcov(mod)))
@@ -582,31 +642,129 @@ oric<-function(mod){
  (exp(tab <- cbind(Est = fixef(mod), LL = fixef(mod) - 1.96 * se, UL = fixef(mod) + 1.96 * se)))
 }
 
-round(oric(moep_23),2)
 
- predictions1ep <- predict(moep_1, type = "response")
- predictions2ep <- predict(moep_2, type = "response")
- predictions23ep<- predict(moep_23, type = "response")
-  
-library(PredictABEL)
- plotROC(na.omit(epoc2), 20,  predictions1ep)
-  plotROC(na.omit(epoc2), 20,  predictions2ep)
-   plotROC(na.omit(epoc2), 20,  predictions23ep )
+round(oric(moic_3id),2)
 
- predictions1ic <- predict(moic_1, type = "response")  
- predictions2ic <- predict(moic_2, type = "response")
- predictions23ic<- predict(moic_23, type = "response")
-  
-library(PredictABEL)
- plotROC(na.omit(icc2), 20,  predictions1ic)
-  plotROC(na.omit(icc2), 20,  predictions2ic)
-   plotROC(na.omit(icc2), 20,  predictions23ic )
+############ ROC contraste: modelo con convariables individuales sin efecto aleatorio, versus con efecto aleatorio de osi, de osi+cupo.
 
-   
-    ? plotROC 
+########### epoc
+
+# specify label of the ROC curve
+labels <- c("~age8+sexo+dm+icc+pacg_3cat[epoc.enf]", "[osi]","[+cupo]","+priv","+ctab")
+
+ names(epocdf) #  "hpe2epoc" esta en la posicion 17
+
+
+predictions0epef <- predict(moep_0ef, type = "response")
+predictions1epefo <- predict(moep_1efo, type = "response")
+predictions1epefoc <- predict(moep_1ef, type = "response")
+predictions2epefoc <- predict(moep_2ef, type = "response")
+predictions3epefoc <- predict(moep_3ef, type = "response")
  
-################################
+
+# produce ROC curve
+plotROC(data=na.omit(epocdf), cOutcome=17, 
+predrisk=cbind(predictions0epef,predictions1epefo,predictions1epefoc,predictions2epefoc,predictions3epefoc), labels=labels)
+rect(0, 1.1, 1, 1.7, xpd=TRUE, col="white", border="white")
+title("ROC HPExEPOC pacientes >60a")
+# AUC [95% CI] for the model 1 :  0.669 [ 0.658  -  0.68 ]  0epef
+# AUC [95% CI] for the model 2 :  0.677 [ 0.666  -  0.689 ] 
+# AUC [95% CI] for the model 3 :  0.708 [ 0.696  -  0.719 ] 
+# AUC [95% CI] for the model 4 :  0.705 [ 0.694  -  0.717 ] 
+# AUC [95% CI] for the model 5 :  0.704 [ 0.693  -  0.716 ] 
+
+
+########### icc
+
+
+# specify label of the ROC curve
+labels <- c("~age8+sexo+dm+pacg_3cat[ICC.enf]", "[osi]","[+cupo]","+priv","+chta")
+
+ names(iccdf) #  "hpe2icc" esta en la posicion 16
+
+
+predictions0icef <- predict(moic_0ef, type = "response")
+predictions1icefo <- predict(moic_1efo, type = "response")
+predictions1icefoc <- predict(moic_1ef, type = "response")
+predictions2icefoc <- predict(moic_2ef, type = "response")
+predictions3icefoc <- predict(moic_3ef, type = "response")
+ 
+
+# produce ROC curve
+plotROC(data=na.omit(iccdf), cOutcome=16, 
+predrisk=cbind(predictions0icef,predictions1icefo,predictions1icefoc,predictions2icefoc,predictions3icefoc), labels=labels)
+rect(0, 1.1, 1, 1.7, xpd=TRUE, col="white", border="white")
+title("ROC HPExICC pacientes >60a")
+
+
+
 ```
+
+
+
+
+```{r funciones glmer}
+
+ ################################ incompleto ################################
+
+
+#https://ase.tufts.edu/gsc/gradresources/guidetomixedmodelsinr/mixed%20model%20guide.html
+
+
+
+
+
+
+## odds ratio 
+oric<-function(mod){
+ se <- sqrt(diag(vcov(mod)))
+# # table of estimates with 95% CI
+ (exp(tab <- cbind(Est = fixef(mod), LL = fixef(mod) - 1.96 * se, UL = fixef(mod) + 1.96 * se)))
+}
+
+## icc
+
+run.vpc.glm <- function(x,n=1,label="osi") {
+m <- round(as.double(VarCorr(x))[n]/(sum(as.double(VarCorr(x))) + pi^2/3),4)*100
+cat(paste("% varianza atribuible al efecto",label), "\n",  "media = ",m, "\n")
+}
+
+
+## MOR
+ MOR.glm <- function(mod, digits = 2)
+          { # MOR arguments: my.model = glme model; extracting variance associated with level 2
+            # clustering variable
+            # digits = number of decimal places to which MOR value
+            # will be rounded.
+            my.var <- as.double(VarCorr(mod))
+            Median.OR <- round(exp(sqrt(2*my.var)*qnorm(.75)), digits)
+            paste("Median Odds-Ratio (MOR) = ", Median.OR)  }
+
+
+ 
+ MOR.glm(almer_p)
+run.vpc.glm(almer_p)
+
+tab4 <- function(mod,base,pos,n,label) {
+  print(round(oric(mod),2))
+ run.vpc.glm(mod)
+ print(MOR.glm(mod))
+ ## AUC
+ predictions <- predict(mod, type = "response")
+ print(plotROC(na.omit(base), pos,  predictions))
+ print(AIC(mod))}
+
+
+tab4(moic_3ef,iccdf,16,2,"cupo")
+tab4(almery_p,"p")
+
+tab4(alcerv_u,"u")
+tab4(almerv_u,"u")
+
+ 
+```
+
+
 
 
 ```{r vpc, message=FALSE, echo=FALSE}
@@ -662,54 +820,50 @@ MOR.glm(moep_23)
 
 
 
-```{r notas}
+* Modelo Poisson sencillo
+```{r INES modelos_pruebas, not includet, eval=FALSE}
+
+mod0 <- MASS::glm.nb(hpe_epoc ~ offset(log(n_cupo)), data = oferta_dat)
+mod1 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + offset(log(n_cupo)), data = oferta_dat)
+mod2 <- MASS::glm.nb(hpe_epoc ~ pmayor64 + pmujer + offset(log(n_cupo)), data = oferta_dat)
+
+rm(mod0, mod1, mod2)
+```
 
 
-names(ind)
-#  [1] "acg"   (una de 9x categorias, isoconsumo.. y criterio clinico)
-# [2]"id_paciente"
-# [3] "cupo"  
-# [4] "uap" 
-# [5] "com" 
-# [6] "edad" 
-# [7] "sexo"       
-#  [8] "numfarmac" (polimedicado??) no lo usame
-# "num" -borrar-
-# "priv"  MEDEA numerico
-# "quintil" MEDEA QUINTIL MEJOR!
-# "dm"          
-# "hta"  -este es otro de las variables que deberiamos elaborar        "epoc"       
-# [15] "icc"  ... esta no es una poblacion de oferta diferente .. en op es hta! mirar la relacion en estas cifras.. cuantos de los icc son hta.. este porcentaje varia.. QUITAR los icc que no tienen hta!!!
 
-#"lipid" -?  
-# "vacuna"  
-# "vacunaepoc" -no- 
-# "insu" - ....... son criterios de gravedad
-# "ado" -  
-# "ieca" ............son criterios de buena atencion que no aparecio en atencion preferente construir el indicador x cupo sobre los -icc / hipertensos     
-#  "insul_dm"    "ado_dm"      "antidm_dm"   "ieca_icc"    "antidm"      "hpe_icc"     "hpe_epoc"   
-# [29] "hpe_dm"      "hpe_tot"     "pesotot"     "pesodm"      "pesoepoc"    "pesoicc"     "mayor64"    
-# [36] "mujer"
+```{r funnel, message=FALSE, echo=FALSE}
 
-ind
+https://www.rdocumentation.org/packages/berryFunctions/versions/1.16.3/topics/funnelPlot
 
-summary(ind)
+############################################################################### Funnel plots for proportional data with confidence interval based on sample size. Introduced by Stephen Few, 2013
 
-### nos quedamos solo con los que tengan alguna de las cronicas hpe.. (segun ACG )
 
-library(dplyr)
-ind <- mutate(ind, dei =paste0(dm, epoc, icc), collapse="")
+pp <- epocdf
+pp <- iccdf
+pp$pobla<-1
 
-indei <- filter(ind, dei!="000")
+## cambiar var2 por hpe2icc o hpe2epoc segun corresponda
 
-summary(indei)
+df1 <- aggregate(cbind(var2,pobla)~osi, data=pp,sum)
+df2 <- aggregate(cbind(var2,pobla)~cupo, data=pp,sum)
+#par(mfrow=c(1,2))
 
-# en indei tenemos los denominadores.. la capa individuo del proyecto.. se entiende que según el indicador entraran o no como denominadores
 
-names(indei)
+p1<-funnelc(df1,"prob h x epoc segun osi")
+p1<-funnelc(df1,"prob h x icc segun osi")
+p1
 
-# a esta base uniremos los indicadores de cupo
+p2<-funnelc(df2,"prob h x epoc segun cupo")
+p2<-funnelc(df2,"prob h x icc segun cupo")
+p2
+
+
+# 
+# funnelPlot(x,y, main="EPOC, riesgo de ingreso hospitalario segun cupo", xlab="tamaño del cupo (pacientes con epoc)", ylab="prob-año de ingreso por descompensacion")
+
 
 
 ```
+
 
