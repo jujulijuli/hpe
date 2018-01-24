@@ -37,6 +37,8 @@ library(ggplot2)
 
 
 library(readxl)
+library(Rmisc) # multiplot
+
 
 ```
 
@@ -613,7 +615,7 @@ plotREsim(REsim(moep_23))
  anova(moic_vef,moic_1ef) # 6.912e-13 ***
 
  anova(moic_1efo,moic_1ef) # 0.1845
- anova(moic_1ef,moic_2ef)
+ anova(moic_1ef,moic_2ef) # 0.1758
  anova(moic_1efo,moic_3ef)
  
  ## todos
@@ -621,12 +623,44 @@ plotREsim(REsim(moep_23))
  anova(moic_1id,moic_2id)
  anova(moic_2id,moic_3id)
  
- coefplot2(list(moep_0ef,moep_1efo,moep_1ef,moep_2ef,moep_3ef))
+ ?coefplot2
+ 
+ coefplot2(list(moep_0ef,moep_1efo,moep_1ef,moep_2ef,moep_3ef), intercept=FALSE)
  coefplot2(list(moic_0ef,moic_1efo,moic_1ef,moic_2ef,moic_3ef))  ## al meter los acg ha cambiado todo!! en icc
  # ahora la edad -ni siquiera las ultimas categorias- aportan, y practicamente tampoco la privacion
 
+ 
    coefplot2(list(moic_0id,moic_1id,moic_2id,moic_3id))  
    coefplot2(list(moep_0id,moep_1id,moep_2id,moep_3id))  
+  
+ 
+ ###########   grafico en escala odds ratio  ####################
+     
+#  https://pat-s.github.io/post/oddsratio/ # odds ratio package 
+# https://stackoverflow.com/questions/26417005/odds-ratio-and-confidence-intervals-from-glmer-output
+   # https://cran.r-project.org/web/packages/sjPlot/vignettes/sjpglm.html
+#   http://www.strengejacke.de/sjPlot/sjp.glmer/
+#https://stackoverflow.com/questions/22607596/how-to-combine-two-sjp-likert-from-the-sjplot-package-generated-plots-in-one-p
+      
+library(sjPlot)
+require(gridExtra)
+require(grid)
+require(ggplot2)
+
+ 
+     
+picid3h <- sjp.glmer(moic_3id, type = "fe") 
+picefh <- sjp.glmer(moic_1efo, type = "fe") 
+picef3 <- sjp.glmer(moic_3ef, type = "fe")    
+
+pepid3h <- sjp.glmer(moep_3id, type = "fe") 
+pepef3h <- sjp.glmer(moep_3ef, type = "fe")    
+
+
+
+grid.arrange(pepid3h$plot, pepef3h$plot, picid3h$plot, picef3$plot, nrow = 2)
+
+
 ```
 
 
